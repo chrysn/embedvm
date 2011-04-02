@@ -1,10 +1,26 @@
+/*
+ *  EmbedVM - Embedded Virtual Machine for uC Applications
+ *
+ *  Copyright (C) 2011  Clifford Wolf <clifford@clifford.at>
+ *  
+ *  Permission to use, copy, modify, and/or distribute this software for any
+ *  purpose with or without fee is hereby granted, provided that the above
+ *  copyright notice and this permission notice appear in all copies.
+ *  
+ *  THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ *  WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ *  MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ *  ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ *  WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ *  ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+ *  OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ *
+ */
 
 %{
 
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
 #include "evmcomp.h"
 
 void yyerror (char const *s) {
@@ -41,7 +57,7 @@ struct func_call_args_desc_s {
 	struct func_call_args_desc_s *fc;
 }
 
-%token <number> TOK_NUMBER
+%token <number> TOK_NUMBER TOK_USERFUNC
 %token <string> TOK_ID
 
 %token TOK_IF TOK_ELSE TOK_DO TOK_FOR TOK_WHILE TOK_RETURN TOK_FUNCTION
@@ -68,7 +84,7 @@ struct func_call_args_desc_s {
 %type <insn> program global_data function_def function_body
 %type <insn> statement_list statement core_statement lvalue expression
 
-%type <number> function_args function_vars
+%type <number> function_args function_vars function_var_list;
 %type <fc> func_call_args
 
 %expect 1
@@ -100,18 +116,22 @@ program:
 global_data:
 	TOK_GLOBAL TOK_ID ';' {
 		$$ = new_insn_data(2, NULL, NULL);
+		$$->symbol = strdup($2);
 		add_nametab_global($2, VARTYPE_GLOBAL_16, $$);
 	} |
 	TOK_ARRAY_8U TOK_ID '[' TOK_NUMBER ']' ';' {
 		$$ = new_insn_data($4, NULL, NULL);
+		$$->symbol = strdup($2);
 		add_nametab_global($2, VARTYPE_GLOBAL_8U, $$);
 	} |
 	TOK_ARRAY_8S TOK_ID '[' TOK_NUMBER ']' ';' {
 		$$ = new_insn_data($4, NULL, NULL);
+		$$->symbol = strdup($2);
 		add_nametab_global($2, VARTYPE_GLOBAL_8S, $$);
 	} |
 	TOK_ARRAY_16 TOK_ID '[' TOK_NUMBER ']' ';' {
 		$$ = new_insn_data(2 * $4, NULL, NULL);
+		$$->symbol = strdup($2);
 		add_nametab_global($2, VARTYPE_GLOBAL_16, $$);
 	};
 
@@ -121,10 +141,17 @@ function_def:
 		struct evm_insn_s *alloc_local = NULL;
 		while (local_vars > 0) {
 			int this_num = local_vars > 8 ? 8 : local_vars;
-			alloc_local = new_insn_op(0xf0 + (this_num-1), alloc_local, NULL);
+			alloc_local = new_insn_op(0xf8 + (this_num-1), alloc_local, NULL);
 			local_vars -= this_num;
 		}
-		$$ = new_insn_op(0x9c, new_insn(alloc_local, $9), NULL);
+		$$ = new_insn(alloc_local, $9);
+		struct evm_insn_s *last_insn = $$;
+		while (last_insn->right != NULL)
+			last_insn = last_insn->right;
+		if (last_insn->opcode != 0x9b && last_insn->opcode != 0x9c)
+			$$ = new_insn_op(0x9c, $$, NULL);
+		add_nametab_global($3, VARTYPE_FUNC, $$);
+		$$->symbol = strdup($3);
 	};
 
 function_args:
@@ -144,8 +171,21 @@ function_vars:
 	/* empty */ {
 		$$ = 0;
 	} |
-	function_vars TOK_LOCAL TOK_ID ';' {
+	function_var_list ';' {
+		$$ = $1;
+	};
+
+function_var_list:
+	TOK_LOCAL TOK_ID {
+		add_nametab_local($2, 0);
+		$$ = 1;
+	} |
+	function_var_list ',' TOK_ID {
 		add_nametab_local($3, $1);
+		$$ = $1 + 1;
+	} |
+	function_var_list ';' TOK_LOCAL TOK_ID {
+		add_nametab_local($4, $1);
 		$$ = $1 + 1;
 	};
 
@@ -192,11 +232,11 @@ statement:
 	TOK_FOR '(' core_statement ';' expression ';' core_statement ')' statement {
 		struct evm_insn_s *end = new_insn(NULL, NULL);
 		struct evm_insn_s *loop = new_insn_op_reladdr(0xa0 + 7, end, $5,
-				new_insn_op_reladdr(0xa0 + 1, $5, $7, end));
+				new_insn_op_reladdr(0xa0 + 1, $5, new_insn($9, $7), end));
 		$$ = new_insn($3, loop);
 	} |
 	TOK_RETURN expression ';' {
-		$$ = new_insn_op(0x9c, $2, NULL);
+		$$ = new_insn_op(0x9b, $2, NULL);
 	} |
 	TOK_RETURN ';' {
 		$$ = new_insn_op(0x9c, NULL, NULL);
@@ -259,10 +299,7 @@ lvalue:
 
 expression:
 	TOK_NUMBER {
-		if ($1 <= 3 && $1 >= -4)
-			$$ = new_insn_op(0x90 + ($1 & 0x07), NULL, NULL);
-		else
-			$$ = new_insn_op_val(0x9a, $1, NULL, NULL);
+		$$ = new_insn_op_val(0x9a, $1, NULL, NULL);
 	} |
 	'(' expression ')' {
 		$$ = $2;
@@ -321,10 +358,19 @@ expression:
 		struct evm_insn_s *popargs = NULL;
 		while ($3->num > 0) {
 			int this_num = $3->num > 8 ? 8 : $3->num;
-			popargs = new_insn_op(0xf8 + (this_num-1), popargs, NULL);
+			popargs = new_insn_op(0xf0 + (this_num-1), popargs, NULL);
 			$3->num -= this_num;
 		}
 		$$ = new_insn_op_reladdr(0xa0 + 3, e->addr, $3->insn, popargs);
+	} |
+	TOK_USERFUNC '(' func_call_args ')' {
+		struct evm_insn_s *popargs = NULL;
+		while ($3->num > 0) {
+			int this_num = $3->num > 8 ? 8 : $3->num;
+			popargs = new_insn_op(0xf0 + (this_num-1), popargs, NULL);
+			$3->num -= this_num;
+		}
+		$$ = new_insn_op(0xb0 + $1, $3->insn, popargs);
 	} |
 	'+' expression %prec NEG {
 		$$ = $2;

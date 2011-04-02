@@ -1,6 +1,6 @@
 
-Address space and word with
----------------------------
+Address space and word width
+----------------------------
 
 The machine can address up to 64k of memory. The memory can be addressed in
 units of single bytes, but local variables are always 16bit words.
@@ -62,9 +62,9 @@ Some instructions push and/or pop values to/from the stack.
 +-------------------------------+----------------------------------------+----+
 | MSB                       LSB |                            Instruction | Off|
 +---+---+---+---+---+---+---+---+----------------------------------------+----+
-| 0 | 0 |          SFA          |           Push local variable to stack | 00 |
+| 0 | 0 |          SFA          |          Pop local variable from stack | 00 |
 +---+---+---+---+---+---+---+---+----------------------------------------+----+
-| 0 | 1 |          SFA          |          Pop local variable from stack | 40 |
+| 0 | 1 |          SFA          |           Push local variable to stack | 40 |
 +---+---+---+---+---+---+---+---+----------------------------------------+----+
 | 1 | 0 | 0 | 0 |     0 .. 0x0  |                    Add (pop 2, push 1) | 80 |
 | 1 | 0 | 0 | 0 |     1 .. 0x1  |                    Sub (pop 2, push 1) |    |
@@ -122,17 +122,17 @@ Some instructions push and/or pop values to/from the stack.
 | 1 | 1 |     4     |     M     |       Load 16 (push 1, M is addr mode) | e0 |
 | 1 | 1 |     5     |     M     |       Store 16 (pop 1, M is addr mode) | e8 |
 +---+---+---+---+---+---+---+---+----------------------------------------+----+
-| 1 | 1 |     6     |     N     |            Push N+1 zeros to the stack | f0 |
+| 1 | 1 |     6     |     N     |            Pop N+1 values but keep top | f0 |
 +---+---+---+---+---+---+---+---+----------------------------------------+----+
-| 1 | 1 |     7     |     N     |            Pop N+1 values but keep top | f8 |
+| 1 | 1 |     7     |     N     |            Push N+1 zeros to the stack | f8 |
 +---+---+---+---+---+---+---+---+----------------------------------------+----+
 
 Asdress Modes (M) for "Load" and "Store" instructions:
 
-   0 ..... address as 1 byte argument
+   0 ..... address as 1 byte (unsigned) argument
    1 ..... address as 2 byte argument
    2 ..... address as popped value (pop before data)
-   3 ..... address as popped + 1 byte argument
+   3 ..... address as popped + 1 byte (unsigned) argument
    4 ..... address as popped + 2 byte argument
    5-7 ... reserved
 
