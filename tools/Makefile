@@ -2,7 +2,7 @@
 CC = gcc
 CFLAGS += -MD -Wall -Wextra -Os -ggdb
 
-evmcomp: evmcomp.o parser.tab.o lex.yy.o
+evmcomp: evmcomp.o codegen.o util.o parser.tab.o lex.yy.o
 
 parser.tab.c parser.tab.h: parser.y
 	bison -d parser.y

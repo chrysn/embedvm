@@ -1,6 +1,6 @@
 
 %{
-#include "evm_tools.h"
+#include "evmcomp.h"
 #include "parser.tab.h"
 %}
 
@@ -53,4 +53,13 @@
 
 [ \t\n\r]	/* ignore whitespaces */
 .		return *yytext;
+
+%%
+
+// this is a hack to force gcc not to generate the following error msgs:
+//   lex.yy.c:1327: warning: ‘yyunput’ defined but not used
+//   lex.yy.c:1372: warning: ‘input’ defined but not used
+void *avoid_gcc_yyunput_input_warnings(int i) {
+	return i ? (void*)&yyunput : (void*)&input;
+}
 
