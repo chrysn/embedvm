@@ -1,0 +1,9 @@
+
+EmbedVM - Embedded Virtual Macine
+=================================
+
+EmbedVM is a small embeddable virtual machine for microcontrollers with a
+C-like language frontend.
+
+It is work under construction.
+

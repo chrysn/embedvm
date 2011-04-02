@@ -1,0 +1,127 @@
+
+Address space and word with
+---------------------------
+
+The machine can address up to 64k of memory. The memory can be addressed in
+units of single bytes, but local variables are always 16bit words.
+
+It operates on 16bit words that are always interpreted as signed integeres in
+context where signed/unsigned does make a difference (multiply/divide and
+the compare operators).
+
+The memory is always accessed using reader/writer functions that are provided
+by the host environment.
+
+
+Machine State
+-------------
+
+The machine state itself is managed using three state variables:
+
+IP (Instruction Pointer)
+	The address of the next instruction to execute
+
+SP (Stack Pointer)
+	The address of the first unused word on the stack.
+
+SFP (Stack Frame Pointer)
+	The address of the first local variable on the stack.
+
+Also there are three function pointers in the machine state for
+embedding the VM in a host environment: a reader and a writer
+for accessing the VM memory and a callback for calling user
+functions.
+
+
+The Stack
+---------
+
+The stack grows from high address to low addresses.
+
+Each local variable is accessed using an SFA (Stack Frame Address).
+The address of a local variable is SFP - 2*SFA.
+
+There is a maximum of 32 local variables in a stack frame and 32
+arguments to a function (arguments have negative SFA).
+
+Calculations are done in a stackmachine like manner (each operation
+pops its operands from the stack and pushes the result).
+
+The return address for the current function is stored in the 16-bit word
+on SFP - 2 and the parent stack frame pointer at SFP - 4.
+
+
+Instruction Encoding
+--------------------
+
+Most instructions fit in a single byte. Some have a 1 or 2 bytes arguments.
+Some instructions push and/or pop values to/from the stack.
+
++-------------------------------+----------------------------------------+
+|MSB                         LSB|                             Instruction|
++---+---+---+---+---+---+---+---+----------------------------------------+
+| 0 | 0 |          SFA          |           Push local variable to stack |
++---+---+---+---+---+---+---+---+----------------------------------------+
+| 0 | 1 |          SFA          |          Pop local variable from stack |
++---+---+---+---+---+---+---+---+----------------------------------------+
+| 1 | 0 | 0 | 0 |     0 .. 0x0  |                    Add (pop 2, push 1) |
+| 1 | 0 | 0 | 0 |     1 .. 0x1  |                    Sub (pop 2, push 1) |
+| 1 | 0 | 0 | 0 |     2 .. 0x2  |                    Mul (pop 2, push 1) |
+| 1 | 0 | 0 | 0 |     3 .. 0x3  |                    Div (pop 2, push 1) |
+| 1 | 0 | 0 | 0 |     4 .. 0x4  |             Shift Left (pop 2, push 1) |
+| 1 | 0 | 0 | 0 |     5 .. 0x5  |            Shift Right (pop 2, push 1) |
+| 1 | 0 | 0 | 0 |     6 .. 0x6  |            Bitwise AND (pop 2, push 1) |
+| 1 | 0 | 0 | 0 |     7 .. 0x7  |             Bitwise OR (pop 2, push 1) |
+| 1 | 0 | 0 | 0 |     8 .. 0x8  |            Bitwise XOR (pop 2, push 1) |
+| 1 | 0 | 0 | 0 |     9 .. 0x9  |            Bitwise NOT (pop 1, push 1) |
+| 1 | 0 | 0 | 0 |    10 .. 0xa  |      Arithmetic invert (pop 1, push 1) |
+| 1 | 0 | 0 | 0 |    11 .. 0xb  |              Logic AND (pop 2, push 1) |
+| 1 | 0 | 0 | 0 |    12 .. 0xc  |               Logic OR (pop 1, push 1) |
+| 1 | 0 | 0 | 0 |    13 .. 0xd  |              Logic NOT (pop 2, push 1) |
+| 1 | 0 | 0 | 0 |     14 - 15   |                               Reserved |
++---+---+---+---+---+---+---+---+----------------------------------------+
+| 1 | 0 | 0 | 1 | 0 |    VAL    |         Push immediate (VAL is signed) |
++---+---+---+---+---+---+---+---+----------------------------------------+
+| 1 | 0 | 0 | 1 | 1 | 0 | 0 | 0 |          Push unsigned 1-byte argument |
+| 1 | 0 | 0 | 1 | 1 | 0 | 0 | 1 |            Push signed 1-byte argument |
+| 1 | 0 | 0 | 1 | 1 | 0 | 1 | 0 |            Push signed 2-byte argument |
++---+---+---+---+---+---+---+---+----------------------------------------+
+| 1 | 0 | 0 | 1 | 1 | 0 | 1 | 1 |           Return from function (pop 1) |
+| 1 | 0 | 0 | 1 | 1 | 1 | 0 | 0 |     Return from function without value |
+| 1 | 0 | 0 | 1 | 1 | 1 | 0 | 1 |                     Drop value (pop 1) |
++---+---+---+---+---+---+---+---+----------------------------------------+
+| 1 | 0 | 0 | 1 | 1 |   6 - 7   |                               Reserved |
++---+---+---+---+---+---+---+---+----------------------------------------+
+| 1 | 0 | 1 | 0 | 0 |     0     |             Jump (1-byte rel. address) |
+| 1 | 0 | 1 | 0 | 0 |     1     |             Jump (2-byte rel. address) |
+| 1 | 0 | 1 | 0 | 0 |     2     |             Call (1-byte rel. address) |
+| 1 | 0 | 1 | 0 | 0 |     3     |             Call (2-byte rel. address) |
+| 1 | 0 | 1 | 0 | 0 |     4     |   Jump IF (pop 1, 1-byte rel. address) |
+| 1 | 0 | 1 | 0 | 0 |     5     |   Jump IF (pop 1, 2-byte rel. address) |
+| 1 | 0 | 1 | 0 | 0 |     6     | Jump UNLESS (pop 1, 1-byte rel. addr.) |
+| 1 | 0 | 1 | 0 | 0 |     7     | Jump UNLESS (pop 1, 2-byte rel. addr.) |
++---+---+---+---+---+---+---+---+----------------------------------------+
+| 1 | 0 | 1 | 0 | 1 |     M     |          Load (push 1, M is addr mode) |
+| 1 | 0 | 1 | 1 | 0 |     M     |          Store (pop 1, M is addr mode) |
++---+---+---+---+---+---+---+---+----------------------------------------+
+| 1 | 0 | 1 | 1 | 1 |   0 - 7   |                               Reserved |
++---+---+---+---+---+---+---+---+----------------------------------------+
+| 1 | 1 |     Function - ID     |                     Call User Function |
++---+---+---+---+---+---+---+---+----------------------------------------+
+
+Asdress Modes for "Load" and "Store" instructions:
+   0 ..... address as 1 byte argument
+   1 ..... address as 2 byte argument
+   2 ..... address as popped value (pop before data)
+   3 ..... address as popped + 1 byte argument
+   4 ..... address as popped + 2 byte argument
+   5-7 ... reserved
+
+
+Execution Model
+---------------
+
+The function evm_exec() executes one single VM instruction and then returns.
+The user provided callback functions are used to access the vm memory and
+call user functions.
+
