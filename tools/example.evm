@@ -1,0 +1,27 @@
+
+global x;
+global y;
+global z;
+
+array8u array_8bit_unsigned[16];
+array8s array_8bit_signed[16];
+array16 array_16bit[16];
+
+function sum3(a,b,c)
+{
+	return a + b + c;
+}
+
+function init()
+{
+	local i;
+	for (i=0; i<16; i=i+1) {
+		array_8bit_unsigned[i] = i;
+		array_8bit_signed[i] = -i;
+		array_16bit[i] = i * 500 * (i%2 == 0 ? +1 : -1);
+	}
+	x = 1;
+	y = 2;
+	z = 3;
+}
+
