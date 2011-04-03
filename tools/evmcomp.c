@@ -63,6 +63,20 @@ abort_with_help_msg:
 	write_binfile(f, codegen_insn);
 	fclose(f);
 
+	strcpy(prefix+prefix_len-4, ".hdr");
+	f = fopen(prefix, "wb");
+	if (!sections) {
+		static struct evm_section_s default_sect = { "SRAM", 0, 0xffff, NULL };
+		sections = &default_sect;
+	}
+	write_header(f);
+	fclose(f);
+
+	strcpy(prefix+prefix_len-4, ".ihx");
+	f = fopen(prefix, "wb");
+	write_intelhex(f);
+	fclose(f);
+
 	return 0;
 }
 

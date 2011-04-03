@@ -70,6 +70,7 @@ void write_symbols(FILE *f, struct evm_insn_s *insn)
 uint16_t bindata_len;
 uint8_t bindata_data[64*1024];
 bool bindata_written[64*1024];
+bool bindata_covered[64*1024];
 
 void write_bindata(int addr, uint8_t data)
 {
@@ -127,5 +128,80 @@ void write_binfile(FILE *f, struct evm_insn_s *insn)
 		putchar(bindata_written[i] ? 'x' : '.');
 	putchar('\n');
 #endif
+}
+
+extern void write_header(FILE *f)
+{
+	struct evm_section_s *sect = sections;
+	int i;
+
+	memset(bindata_covered, 0, sizeof(bindata_data));
+
+	while (sect) {
+		int real_end = sect->end;
+		while (real_end >= sect->begin && !bindata_written[real_end])
+			real_end--;
+		fprintf(f, "#define EMBEDVM_SECT_%s_BEGIN 0x%04x\n", sect->name, sect->begin);
+		fprintf(f, "#define EMBEDVM_SECT_%s_END 0x%04x\n", sect->name, sect->end);
+		fprintf(f, "#define EMBEDVM_SECT_%s_DATA", sect->name);
+		for (i = sect->begin; i <= real_end; i++) {
+			fprintf(f, "%s%d", i ? "," : " ", bindata_data[i]);
+			bindata_covered[i] = 1;
+		}
+		fprintf(f, "\n");
+		sect = sect->next;
+	}
+
+	for (i = 0; i < (int)sizeof(bindata_data); i++) {
+		if (bindata_covered[i])
+			continue;
+		if (!bindata_written[i])
+			continue;
+		fprintf(stderr, "Data at 0x%04x is not covered by any section!\n", i);
+		exit(1);
+	}
+}
+
+void ihex_line(FILE *f, uint8_t len, uint16_t addr, uint8_t type, uint8_t *data)
+{
+	uint8_t buffer[len+5];
+	int i, j;
+
+	buffer[0] = len;
+	buffer[1] = addr >> 8;
+	buffer[2] = addr & 0xff;
+	buffer[3] = type;
+
+	for (i = 0; i < len; i++)
+		buffer[4+i] = data[i];
+
+	for (i = j = 0; i < len+4; i++)
+		j += buffer[i];
+
+	buffer[len+4] = -j;
+
+	fprintf(f, ":");
+	for (i = 0; i < len+5; i++)
+		fprintf(f, "%02x", buffer[i]);
+	fprintf(f, "\n");
+}
+
+extern void write_intelhex(FILE *f)
+{
+	struct evm_section_s *sect = sections;
+	int i, len;
+
+	while (sect) {
+		int real_end = sect->end;
+		while (real_end >= sect->begin && !bindata_written[real_end])
+			real_end--;
+		for (i = sect->begin; i <= real_end; i += 0x20) {
+			len = (real_end-i+1) < 0x20 ? (real_end-i+1) : 0x20;
+			ihex_line(f, len, i, 0, bindata_data+i);
+		}
+		sect = sect->next;
+	}
+	ihex_line(f, 0, 0, 1, NULL);
+
 }
 

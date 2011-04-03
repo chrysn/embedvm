@@ -19,6 +19,8 @@
 
 %{
 
+#define _GNU_SOURCE
+
 #include <stdlib.h>
 #include <string.h>
 #include "evmcomp.h"
@@ -35,6 +37,8 @@ struct nametab_entry_s {
 	struct nametab_entry_s *next;
 	bool is_forward_decl;
 };
+
+struct evm_section_s *sections;
 
 struct nametab_entry_s *local_ids;
 struct nametab_entry_s *global_ids;
@@ -63,7 +67,7 @@ struct func_call_args_desc_s {
 
 %token TOK_IF TOK_ELSE TOK_DO TOK_FOR TOK_WHILE TOK_RETURN TOK_FUNCTION
 %token TOK_LOCAL TOK_GLOBAL TOK_ARRAY_8U TOK_ARRAY_8S TOK_ARRAY_16
-%token TOK_LINE TOK_ADDR TOK_EXTERN TOK_MEMADDR TOK_TRAMPOLINE
+%token TOK_LINE TOK_ADDR TOK_EXTERN TOK_MEMADDR TOK_SECTION TOK_TRAMPOLINE
 
 %left TOK_LOR
 %left TOK_LAND
@@ -102,6 +106,9 @@ input:
 program:
 	/* empty */ {
 		$$ = NULL;
+		sections = NULL;
+		local_ids = NULL;
+		global_ids = NULL;
 	} |
 	program meta_statement {
 		$$ = new_insn($1, $2);
@@ -116,7 +123,8 @@ program:
 meta_statement:
 	TOK_MEMADDR TOK_NUMBER {
 		$$ = new_insn(NULL, NULL);
-		$$->symbol = strdup(".memaddr");
+		if (asprintf(&$$->symbol, "_memaddr_%04x", $2) < 0)
+			abort();
 		$$->has_set_addr = true;
 		$$->set_addr = $2;
 	} |
@@ -127,7 +135,21 @@ meta_statement:
 			exit(1);
 		}
 		$$ = new_insn_op_reladdr(0xa0 + 1, e->addr, NULL, NULL);
-		$$->symbol = strdup(".trampoline");
+		if (asprintf(&$$->symbol, "_trampoline_%s", $3) < 0)
+			abort();
+		$$->has_set_addr = true;
+		$$->set_addr = $2;
+	} |
+	TOK_SECTION TOK_NUMBER TOK_NUMBER TOK_ID {
+		struct evm_section_s *sect = calloc(1, sizeof(struct evm_section_s));
+		sect->begin = $2;
+		sect->end = $3;
+		sect->name = strdup($4);
+		sect->next = sections;
+		sections = sect;
+		$$ = new_insn(NULL, NULL);
+		if (asprintf(&$$->symbol, "_section_%s", $4) < 0)
+			abort();
 		$$->has_set_addr = true;
 		$$->set_addr = $2;
 	};

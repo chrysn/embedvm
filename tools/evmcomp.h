@@ -47,6 +47,14 @@ struct evm_insn_s {
 	char *symbol;
 };
 
+struct evm_section_s {
+	char *name;
+	uint16_t begin, end;
+	struct evm_section_s *next;
+};
+
+extern struct evm_section_s *sections;
+
 extern struct evm_insn_s *new_insn(struct evm_insn_s *left, struct evm_insn_s *right);
 
 extern struct evm_insn_s *new_insn_op(uint8_t opcode,
@@ -73,6 +81,8 @@ extern void codegen(struct evm_insn_s *insn);
 extern void write_debug(FILE *f, struct evm_insn_s *insn);
 extern void write_symbols(FILE *f, struct evm_insn_s *insn);
 extern void write_binfile(FILE *f, struct evm_insn_s *insn);
+extern void write_header(FILE *f);
+extern void write_intelhex(FILE *f);
 
 extern int yydebug;
 extern int yylex(void);
