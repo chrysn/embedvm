@@ -12,6 +12,8 @@ the compare operators).
 The memory is always accessed using reader/writer functions that are provided
 by the host environment.
 
+All 16bit memory operations are performed in big endian byte order.
+
 
 Machine State
 -------------

@@ -3,7 +3,16 @@ EmbedVM - Embedded Virtual Machine
 ==================================
 
 EmbedVM is a small embeddable virtual machine for microcontrollers with a
-C-like language frontend.
+C-like language frontend. It has been tested with GCC and AVR microcontrollers.
+But as the Virtual machine is rather simple it should be easy to port it to
+other architectures.
 
-It is work under construction.
+The file README.VM contains a brief description of the virtual machine.
 
+The directory tools/ contains a C-like compiler for generating VM bytecode.
+See tools/example.evm for a simple demo application.
+
+The directory vmsrc/ contains the virtual machine itself and a simple demo
+host application as reference for how to embedd the VM.
+
+The directory examples/ contains example applications using EmbedVM.

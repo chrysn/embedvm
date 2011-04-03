@@ -1,0 +1,14 @@
+
+This is a simple demo application for EmbedVM using the
+Arduino prototyping platform.
+
+You need the Arduino IDE [1] and arduino-cc [2] in order
+to build this application.
+
+This program is not really using much of the AVR I/O
+capabilities. It is only using the serial line (at 9600 baud)
+to communicate with the user.
+
+[1] http://www.arduino.cc/
+[2] http://svn.clifford.at/tools/trunk/arduino-cc.sh
+
