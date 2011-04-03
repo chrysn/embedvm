@@ -141,7 +141,7 @@ function_def:
 		struct evm_insn_s *alloc_local = NULL;
 		while (local_vars > 0) {
 			int this_num = local_vars > 8 ? 8 : local_vars;
-			alloc_local = new_insn_op(0xf8 + (this_num-1), alloc_local, NULL);
+			alloc_local = new_insn_op(0xf0 + (this_num-1), alloc_local, NULL);
 			local_vars -= this_num;
 		}
 		$$ = new_insn(alloc_local, $9);
@@ -358,7 +358,7 @@ expression:
 		struct evm_insn_s *popargs = NULL;
 		while ($3->num > 0) {
 			int this_num = $3->num > 8 ? 8 : $3->num;
-			popargs = new_insn_op(0xf0 + (this_num-1), popargs, NULL);
+			popargs = new_insn_op(0xf8 + (this_num-1), popargs, NULL);
 			$3->num -= this_num;
 		}
 		$$ = new_insn_op_reladdr(0xa0 + 3, e->addr, $3->insn, popargs);
@@ -367,7 +367,7 @@ expression:
 		struct evm_insn_s *popargs = NULL;
 		while ($3->num > 0) {
 			int this_num = $3->num > 8 ? 8 : $3->num;
-			popargs = new_insn_op(0xf0 + (this_num-1), popargs, NULL);
+			popargs = new_insn_op(0xf8 + (this_num-1), popargs, NULL);
 			$3->num -= this_num;
 		}
 		$$ = new_insn_op(0xb0 + $1, $3->insn, popargs);
@@ -405,19 +405,19 @@ expression:
 	expression '^' expression {
 		$$ = new_insn_op(0x80 + 9, new_insn($1, $3), NULL);
 	} |
-	'~' expression %prec NEG {
-		$$ = new_insn_op(0x80 + 10, $2, NULL);
-	} |
-	'-' expression %prec NEG {
-		$$ = new_insn_op(0x80 + 11, $2, NULL);
-	} |
 	expression TOK_LAND expression {
 		// TBD: Skip 2nd expr if 1st is already false
-		$$ = new_insn_op(0x80 + 12, new_insn($1, $3), NULL);
+		$$ = new_insn_op(0x80 + 10, new_insn($1, $3), NULL);
 	} |
 	expression TOK_LOR expression {
 		// TBD: Skip 2nd expr if 1st is already true
-		$$ = new_insn_op(0x80 + 13, new_insn($1, $3), NULL);
+		$$ = new_insn_op(0x80 + 11, new_insn($1, $3), NULL);
+	} |
+	'~' expression %prec NEG {
+		$$ = new_insn_op(0x80 + 12, $2, NULL);
+	} |
+	'-' expression %prec NEG {
+		$$ = new_insn_op(0x80 + 13, $2, NULL);
 	} |
 	'!' expression %prec NEG {
 		$$ = new_insn_op(0x80 + 14, $2, NULL);
@@ -458,7 +458,7 @@ func_call_args:
 	} |
 	func_call_args ',' expression {
 		$$ = $1;
-		$$->insn = new_insn($$->insn, $3);
+		$$->insn = new_insn($3, $$->insn);
 		$$->num++;
 	};
 

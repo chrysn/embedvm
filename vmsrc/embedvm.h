@@ -17,47 +17,28 @@
  *
  */
 
-global x;
-global y;
-global z;
+#ifndef EMBEDVM_H
+#define EMBEDVM_H
 
-array8u array_8bit_unsigned[16];
-array8s array_8bit_signed[16];
-array16 array_16bit[16];
+#include <stdint.h>
+#include <stdbool.h>
 
-function sum3(a,b,c)
+struct embedvm_s
 {
-	return a + 2*b + 3*c;
-}
+	uint16_t ip, sp, sfp;
+	void *user_ctx;
 
-function sum_loop()
-{
-	local i, j;
-	for (i=0; i<16; i=i+1)
-	for (j=0; j<16; j=j+1) {
-		array_16bit[i] = array_16bit[i] + array_8bit_unsigned[j];
-	}
-}
+	int16_t (*mem_read)(uint16_t addr, bool is16bit, void *ctx);
+	void (*mem_write)(uint16_t addr, int16_t value, bool is16bit, void *ctx);
+	int16_t (*call_user)(uint8_t funcid, uint16_t args, void *ctx);
+};
 
-function init()
-{
-	local i;
-	for (i=0; i<16; i=i+1) {
-		array_8bit_unsigned[i] = i;
-		array_8bit_signed[i] = -i;
-		array_16bit[i] = i * 500 * (i%2 == 0 ? +1 : -1);
-	}
-	x = 1;
-	y = 2;
-	z = 3;
-}
+extern void embedvm_exec(struct embedvm_s *vm);
 
-function demo()
-{
-	userfunc1(1);
-	userfunc2(2, 3);
-	userfunc3(4, 5, 6);
-	// userfunc1(sum3(1, 10, 100));
-	userfunc0();
-}
+int16_t embedvm_pop(struct embedvm_s *vm);
+void embedvm_push(struct embedvm_s *vm, int16_t value);
 
+int16_t embedvm_local_read(struct embedvm_s *vm, int8_t sfa);
+void embedvm_local_write(struct embedvm_s *vm, int8_t sfa, int16_t value);
+
+#endif

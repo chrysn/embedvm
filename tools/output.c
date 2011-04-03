@@ -81,7 +81,7 @@ void write_binfile(FILE *f, struct evm_insn_s *insn)
 		if (insn->has_arg_data == 2)
 			fputc((insn->arg_val >> 8) & 0xff, f);
 		if (insn->has_arg_data >= 1)
-			fputc(insn->opcode & 0xff, f);
+			fputc(insn->arg_val & 0xff, f);
 	}
 	
 	write_binfile(f, insn->right);

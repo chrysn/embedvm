@@ -22,7 +22,7 @@ IP (Instruction Pointer)
 	The address of the next instruction to execute
 
 SP (Stack Pointer)
-	The address of the first unused word on the stack.
+	The address of the last pushed word on the stack.
 
 SFP (Stack Frame Pointer)
 	The address of the first local variable on the stack.
@@ -41,7 +41,7 @@ The stack grows from high address to low addresses.
 Each local variable is accessed using an SFA (Stack Frame Address).
 The address of a local variable is:
 
-          SFA >= 0  ?  SFP - 2*SFA  :  SFP - 2*SFA + 4
+          SFA >= 0  ?  SFP - 2*SFA - 2 :  SFP - 2*SFA + 2
 
 There is a maximum of 32 local variables in a stack frame and 32
 arguments to a function (arguments have negative SFA).
@@ -50,7 +50,7 @@ Calculations are done in a stackmachine like manner (each operation
 pops its operands from the stack and pushes the result).
 
 The return address for the current function is stored in the 16-bit word
-on SFP - 2 and the parent stack frame pointer at SFP - 4.
+on SFP + 2 and the parent stack frame pointer at SFP + 4.
 
 
 Instruction Encoding
@@ -62,9 +62,9 @@ Some instructions push and/or pop values to/from the stack.
 +-------------------------------+----------------------------------------+----+
 | MSB                       LSB |                            Instruction | Off|
 +---+---+---+---+---+---+---+---+----------------------------------------+----+
-| 0 | 0 |          SFA          |          Pop local variable from stack | 00 |
+| 0 | 0 |          SFA          |           Push local variable to stack | 00 |
 +---+---+---+---+---+---+---+---+----------------------------------------+----+
-| 0 | 1 |          SFA          |           Push local variable to stack | 40 |
+| 0 | 1 |          SFA          |          Pop local variable from stack | 40 |
 +---+---+---+---+---+---+---+---+----------------------------------------+----+
 | 1 | 0 | 0 | 0 |     0 .. 0x0  |                    Add (pop 2, push 1) | 80 |
 | 1 | 0 | 0 | 0 |     1 .. 0x1  |                    Sub (pop 2, push 1) |    |
@@ -76,10 +76,10 @@ Some instructions push and/or pop values to/from the stack.
 | 1 | 0 | 0 | 0 |     7 .. 0x7  |            Bitwise AND (pop 2, push 1) |    |
 | 1 | 0 | 0 | 0 |     8 .. 0x8  |             Bitwise OR (pop 2, push 1) |    |
 | 1 | 0 | 0 | 0 |     9 .. 0x9  |            Bitwise XOR (pop 2, push 1) |    |
-| 1 | 0 | 0 | 0 |    10 .. 0xa  |            Bitwise NOT (pop 1, push 1) |    |
-| 1 | 0 | 0 | 0 |    11 .. 0xb  |      Arithmetic invert (pop 1, push 1) |    |
-| 1 | 0 | 0 | 0 |    12 .. 0xc  |              Logic AND (pop 2, push 1) |    |
-| 1 | 0 | 0 | 0 |    13 .. 0xd  |               Logic OR (pop 1, push 1) |    |
+| 1 | 0 | 0 | 0 |    10 .. 0xa  |              Logic AND (pop 2, push 1) |    |
+| 1 | 0 | 0 | 0 |    11 .. 0xb  |               Logic OR (pop 2, push 1) |    |
+| 1 | 0 | 0 | 0 |    12 .. 0xc  |            Bitwise NOT (pop 1, push 1) |    |
+| 1 | 0 | 0 | 0 |    13 .. 0xd  |      Arithmetic invert (pop 1, push 1) |    |
 | 1 | 0 | 0 | 0 |    14 .. 0xe  |              Logic NOT (pop 1, push 1) |    |
 | 1 | 0 | 0 | 0 |    15 .. 0xf  |                               Reserved |    |
 +---+---+---+---+---+---+---+---+----------------------------------------+----+
@@ -122,9 +122,9 @@ Some instructions push and/or pop values to/from the stack.
 | 1 | 1 |     4     |     M     |       Load 16 (push 1, M is addr mode) | e0 |
 | 1 | 1 |     5     |     M     |       Store 16 (pop 1, M is addr mode) | e8 |
 +---+---+---+---+---+---+---+---+----------------------------------------+----+
-| 1 | 1 |     6     |     N     |            Pop N+1 values but keep top | f0 |
+| 1 | 1 |     6     |     N     |            Push N+1 zeros to the stack | f0 |
 +---+---+---+---+---+---+---+---+----------------------------------------+----+
-| 1 | 1 |     7     |     N     |            Push N+1 zeros to the stack | f8 |
+| 1 | 1 |     7     |     N     |            Pop N+1 values but keep top | f8 |
 +---+---+---+---+---+---+---+---+----------------------------------------+----+
 
 Asdress Modes (M) for "Load" and "Store" instructions:
@@ -143,7 +143,7 @@ data from the stack is multiplied by 2.
 Execution Model
 ---------------
 
-The function evm_exec() executes one single VM instruction and then returns.
-The user provided callback functions are used to access the vm memory and
-call user functions.
+The function embedvm_exec() executes one single VM instruction and then
+returns. The user provided callback functions are used to access the vm
+memory and call user functions.
 

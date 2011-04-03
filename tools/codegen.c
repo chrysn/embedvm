@@ -25,10 +25,9 @@ uint16_t assign_addr(struct evm_insn_s *insn, uint16_t addr)
 	if (!insn)
 		return addr;
 
-	addr = assign_addr(insn->left, addr);
-
 	insn->addr = addr;
 
+	addr = assign_addr(insn->left, addr);
 	addr += insn->data_len + insn->has_opcode + insn->has_arg_data;
 	addr = assign_addr(insn->right, addr);
 
