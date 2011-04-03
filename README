@@ -9,6 +9,8 @@ other architectures.
 
 The file README.VM contains a brief description of the virtual machine.
 
+A documentation of the high level language frontend in still to be done.
+
 The directory tools/ contains a C-like compiler for generating VM bytecode.
 See tools/example.evm for a simple demo application.
 
@@ -16,3 +18,4 @@ The directory vmsrc/ contains the virtual machine itself and a simple demo
 host application as reference for how to embedd the VM.
 
 The directory examples/ contains example applications using EmbedVM.
+

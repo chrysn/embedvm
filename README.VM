@@ -60,6 +60,7 @@ Instruction Encoding
 
 Most instructions fit in a single byte. Some have a 1 or 2 bytes arguments.
 Some instructions push and/or pop values to/from the stack.
+Not all of the instructions are actually used by the compiler.
 
 +-------------------------------+----------------------------------------+----+
 | MSB                       LSB |                            Instruction | Off|
