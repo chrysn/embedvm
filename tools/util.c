@@ -86,7 +86,7 @@ void insn_dump(struct evm_insn_s *insn, char *type, int indent)
 
 	insn_dump(insn->left, "LEFT", indent+1);
 
-	printf("%*s%s %p @ %04x:", indent, "", type, insn, insn->addr);
+	printf("%*s%s %p @ %04x %04x:", indent, "", type, insn, insn->addr, insn->inner_addr);
 
 	if (insn->symbol)
 		printf(" sym=%s", insn->symbol);

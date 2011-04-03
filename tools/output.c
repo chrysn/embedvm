@@ -34,8 +34,6 @@ void write_debug(FILE *f, struct evm_insn_s *insn)
 
 	if (insn->has_opcode || insn->data_len)
 	{
-		fprintf(f, " <%x>", insn->addr);
-
 		if (insn->data_len > 0)
 			fprintf(f, " D[%d]", insn->data_len);
 
@@ -96,6 +94,7 @@ uint16_t prep_bindata(struct evm_insn_s *insn, uint16_t addr)
 	assert(addr == insn->addr);
 
 	addr = prep_bindata(insn->left, addr);
+	assert(addr == insn->inner_addr);
 
 	for (i = 0; i < insn->data_len; i++)
 		write_bindata(addr++, 0);

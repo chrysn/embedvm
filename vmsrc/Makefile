@@ -22,7 +22,7 @@ CFLAGS += -MD -Wall -Wextra -Os -ggdb
 evmdemo: evmdemo.o embedvm.o
 
 clean:
-	rm -f evmdemo *.d *.o core
+	rm -f evmdemo evmdemo.core *.d *.o core
 
 -include *.d
 

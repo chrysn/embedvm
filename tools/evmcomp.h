@@ -43,7 +43,7 @@ struct evm_insn_s {
 	uint16_t data_len;
 	struct evm_insn_s *arg_addr;
 	struct evm_insn_s *left, *right;
-	uint16_t addr, set_addr;
+	uint16_t addr, set_addr, inner_addr;
 	char *symbol;
 };
 

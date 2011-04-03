@@ -93,14 +93,22 @@ exit_with_helpmsg:
 
 	stop = false;
 	while (!stop) {
-#if 1
+#if 0
 		printf("IP: %04x (%02x %02x %02x %02x),  ", vm.ip,
 				memory[vm.ip], memory[vm.ip+1], memory[vm.ip+2], memory[vm.ip+3]);
-		printf("SP: %04x (%04x %04x %04x %04x)\n", vm.sp,
-				*(uint16_t*)(memory + vm.sp + 0), *(uint16_t*)(memory + vm.sp + 1),
-				*(uint16_t*)(memory + vm.sp + 2), *(uint16_t*)(memory + vm.sp + 3));
+		printf("SP: %04x (%02x%02x %02x%02x %02x%02x %02x%02x)\n", vm.sp,
+				memory[vm.sp + 0], memory[vm.sp + 1],
+				memory[vm.sp + 2], memory[vm.sp + 3],
+				memory[vm.sp + 4], memory[vm.sp + 5],
+				memory[vm.sp + 6], memory[vm.sp + 7]);
 #endif
 		embedvm_exec(&vm);
+	}
+
+	f = fopen("evmdemo.core", "wb");
+	if (f) {
+		fwrite(memory, sizeof(memory), 1, f);
+		fclose(f);
 	}
 
 	return 0;

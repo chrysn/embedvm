@@ -30,7 +30,7 @@ uint16_t assign_addr_pass1(struct evm_insn_s *insn, uint16_t addr)
 		addr = insn->set_addr;
 	insn->addr = addr;
 
-	addr = assign_addr_pass1(insn->left, addr);
+	insn->inner_addr = addr = assign_addr_pass1(insn->left, addr);
 	addr += insn->data_len + insn->has_opcode + insn->has_arg_data;
 	codegen_len = codegen_len > addr ? codegen_len : addr;
 	addr = assign_addr_pass1(insn->right, addr);
@@ -46,7 +46,7 @@ void assign_addr_pass2(struct evm_insn_s *insn)
 	if (insn->arg_addr) {
 		insn->arg_val = insn->arg_addr->addr;
 		if (insn->arg_is_relative)
-			insn->arg_val -= insn->addr;
+			insn->arg_val -= insn->inner_addr;
 	}
 
 	assign_addr_pass2(insn->left);

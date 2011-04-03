@@ -49,6 +49,7 @@ function init()
 		array_8bit_unsigned[i] = i;
 		array_8bit_signed[i] = -i;
 		array_16bit[i] = i * 500 * (i%2 == 0 ? +1 : -1);
+		userfunc2(i, array_16bit[i]);
 	}
 	x = 1;
 	y = 2;
@@ -57,11 +58,22 @@ function init()
 
 function demo()
 {
+	local i, sum;
+
+	init();
+	sum_loop();
+
 	userfunc1(1);
 	userfunc2(2, 3);
 	userfunc3(4, 5, 6);
 	userfunc4($line, $addr);
-	// userfunc5(sum3(1, 10, 100));
+	userfunc5(sum3(1, 10, 100));
+
+	for (i=0; i<16; i=i+1)
+		sum = userfunc6(sum, array_16bit[i]);
+
+	userfunc7(userfunc6(-sum) + 2920);
+
 	userfunc0();
 }
 
