@@ -7,15 +7,36 @@ C-like language frontend. It has been tested with GCC and AVR microcontrollers.
 But as the Virtual machine is rather simple it should be easy to port it to
 other architectures.
 
+The VM simulates a 16bit CPU that can access up to 64kB of memory. It can
+only operate on 16bit values and arrays of 16bit and 8bit values. There is
+no support for complex data structures (struct, objects, etc.). A function
+can have a maximum of 32 local variables and 32 arguments.
+
+Besides the memory for the VM, a small structure holding the VM state and
+the reasonable amount of memory the EmbedVM functions need on the stack there
+are no additional memory requirements for the VM. Especially the VM does not
+depend on any dymaic memory management.
+
+All memory accesses done by the VM are parformed using user callback functions.
+So it is possible to have some or all of the VM memory on external memory
+devices, flash memory, etc. or "memory-map" hardware functions to the VM.
+
+The compiler is a UNIX/Linux commandline tool that reads in a *.evm file and
+generates bytecode in vaious formats (binary file, intel hex, C array
+initializers and a special debug output format). It also generates a symbol
+file that can be used to access data in the VM memory from the host
+application.
+
 The file README.VM contains a brief description of the virtual machine.
 
-A documentation of the high level language frontend in still to be done.
+A documentation of the high level language frontend is still to be done.
 
-The directory tools/ contains a C-like compiler for generating VM bytecode.
+The directory tools/ contains a compiler for the C-like EVM lagnuage that
+can be used for generating VM bytecode in various formats.
 See tools/example.evm for a simple demo application.
 
 The directory vmsrc/ contains the virtual machine itself and a simple demo
-host application as reference for how to embedd the VM.
+host application as a reference for how to embedd the VM.
 
 The directory examples/ contains example applications using EmbedVM.
 

@@ -11,6 +11,8 @@ struct embedvm_s vm = { };
 
 int16_t mem_read(uint16_t addr, bool is16bit, void *ctx)
 {
+	if (addr + (is16bit ? 1 : 0) >= sizeof(vm_mem))
+		return 0;
 	if (is16bit)
 		return (vm_mem[addr] << 8) | vm_mem[addr+1];
 	return vm_mem[addr];
@@ -18,6 +20,8 @@ int16_t mem_read(uint16_t addr, bool is16bit, void *ctx)
 
 void mem_write(uint16_t addr, int16_t value, bool is16bit, void *ctx)
 {
+	if (addr + (is16bit ? 1 : 0) >= sizeof(vm_mem))
+		return;
 	if (is16bit) {
 		vm_mem[addr] = value >> 8;
 		vm_mem[addr+1] = value;
