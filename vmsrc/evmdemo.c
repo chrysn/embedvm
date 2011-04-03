@@ -30,19 +30,20 @@ static uint8_t memory[64*1024];
 static int16_t mem_read(uint16_t addr, bool is16bit, void *ctx UNUSED)
 {
 	if (is16bit)
-		return *(int16_t*)(memory + addr);
+		return (memory[addr] << 8) | memory[addr+1];
 	return memory[addr];
 }
 
 static void mem_write(uint16_t addr, int16_t value, bool is16bit, void *ctx UNUSED)
 {
-	if (is16bit)
-		*(int16_t*)(memory + addr) = value;
-	else
+	if (is16bit) {
+		memory[addr] = value >> 8;
+		memory[addr+1] = value;
+	} else
 		memory[addr] = value;
 }
 
-static int16_t call_user(uint8_t funcid, uint16_t args, void *ctx UNUSED)
+static int16_t call_user(uint8_t funcid, uint8_t argc, int16_t *argv, void *ctx UNUSED)
 {
 	int16_t ret = 0;
 	int i;
@@ -53,11 +54,11 @@ static int16_t call_user(uint8_t funcid, uint16_t args, void *ctx UNUSED)
 		return ret;
 	}
 
-	printf("Called user function %d with args:", funcid);
+	printf("Called user function %d with %d args:", funcid, argc);
 
-	for (i = 0; i < funcid; i++) {
-		printf(" %d", mem_read(args + 2*i, true, ctx));
-		ret += mem_read(args + 2*i, true, ctx);
+	for (i = 0; i < argc; i++) {
+		printf(" %d", argv[i]);
+		ret += argv[i];
 	}
 
 	printf(" => %d\n", ret);

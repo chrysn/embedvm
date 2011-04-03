@@ -18,6 +18,9 @@
  */
 
 #include "evmcomp.h"
+#include <stdlib.h>
+#include <string.h>
+#include <assert.h>
 
 void write_debug(FILE *f, struct evm_insn_s *insn)
 {
@@ -31,6 +34,8 @@ void write_debug(FILE *f, struct evm_insn_s *insn)
 
 	if (insn->has_opcode || insn->data_len)
 	{
+		fprintf(f, " <%x>", insn->addr);
+
 		if (insn->data_len > 0)
 			fprintf(f, " D[%d]", insn->data_len);
 
@@ -64,26 +69,64 @@ void write_symbols(FILE *f, struct evm_insn_s *insn)
 	write_symbols(f, insn->right);
 }
 
-void write_binfile(FILE *f, struct evm_insn_s *insn)
+uint16_t bindata_len;
+uint8_t bindata_data[64*1024];
+bool bindata_written[64*1024];
+
+void write_bindata(int addr, uint8_t data)
+{
+	if (bindata_written[addr]) {
+		fprintf(stderr, "Double-write on memory cell 0x%04x!\n", addr);
+		exit(1);
+	}
+	bindata_data[addr] = data;
+	bindata_written[addr] = true;
+	bindata_len = bindata_len > addr+1 ? bindata_len : addr+1;
+}
+
+uint16_t prep_bindata(struct evm_insn_s *insn, uint16_t addr)
 {
 	int i;
 
 	if (!insn)
-		return;
+		return addr;
 
-	write_binfile(f, insn->left);
+	if (insn->has_set_addr)
+		addr = insn->set_addr;
+	assert(addr == insn->addr);
+
+	addr = prep_bindata(insn->left, addr);
 
 	for (i = 0; i < insn->data_len; i++)
-		fputc(0, f);
+		write_bindata(addr++, 0);
 
-	if (insn->has_opcode) {
-		fputc(insn->opcode, f);
-		if (insn->has_arg_data == 2)
-			fputc((insn->arg_val >> 8) & 0xff, f);
-		if (insn->has_arg_data >= 1)
-			fputc(insn->arg_val & 0xff, f);
-	}
-	
-	write_binfile(f, insn->right);
+	if (insn->has_opcode)
+		write_bindata(addr++, insn->opcode);
+
+	if (insn->has_arg_data == 2)
+		write_bindata(addr++, (insn->arg_val >> 8) & 0xff);
+
+	if (insn->has_arg_data >= 1)
+		write_bindata(addr++, insn->arg_val & 0xff);
+
+	addr = prep_bindata(insn->right, addr);
+	return addr;
+}
+
+void write_binfile(FILE *f, struct evm_insn_s *insn)
+{
+	bindata_len = 0;
+	memset(bindata_data, 0, sizeof(bindata_data));
+	memset(bindata_written, 0, sizeof(bindata_written));
+	prep_bindata(insn, 0);
+
+	fwrite(bindata_data, bindata_len, 1, f);
+
+#if 0
+	int i;
+	for (i=0; i<bindata_len; i++)
+		putchar(bindata_written[i] ? 'x' : '.');
+	putchar('\n');
+#endif
 }
 

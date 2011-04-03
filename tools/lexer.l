@@ -45,6 +45,12 @@
 "array8s"	return TOK_ARRAY_8S;
 "array16"	return TOK_ARRAY_16;
 
+"$line"		return TOK_LINE;
+"$addr"		return TOK_ADDR;
+"$extern"	return TOK_EXTERN;
+"$memaddr"	return TOK_MEMADDR;
+"$trampoline"	return TOK_TRAMPOLINE;
+
 "<<"		return TOK_SHL;
 ">>"		return TOK_SHL;
 

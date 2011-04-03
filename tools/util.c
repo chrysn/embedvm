@@ -79,3 +79,44 @@ extern struct evm_insn_s *new_insn_data(uint16_t len,
 	return insn;
 }
 
+void insn_dump(struct evm_insn_s *insn, char *type, int indent)
+{
+	if (!insn)
+		return;
+
+	insn_dump(insn->left, "LEFT", indent+1);
+
+	printf("%*s%s %p @ %04x:", indent, "", type, insn, insn->addr);
+
+	if (insn->symbol)
+		printf(" sym=%s", insn->symbol);
+
+	if (insn->has_set_addr)
+		printf(" setaddr=%04x", insn->set_addr);
+
+	if (insn->has_opcode)
+		printf(" op=%02x", insn->opcode);
+
+	if (insn->has_arg_data == 1)
+		printf(" arg=%02x", insn->arg_val & 0xff);
+
+	if (insn->has_arg_data == 2)
+		printf(" arg=%04x", insn->arg_val);
+
+	if (insn->arg_is_relative)
+		printf(" rel");
+
+	if (insn->arg_addr != NULL)
+		printf(" argaddr=%p", insn->arg_addr);
+
+	if (insn->arg_did_grow_again)
+		printf(" regrow");
+
+	if (insn->data_len)
+		printf(" datalen=%d", insn->data_len);
+
+	printf("\n");
+
+	insn_dump(insn->right, "RIGHT", indent+1);
+}
+

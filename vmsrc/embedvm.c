@@ -160,8 +160,14 @@ extern void embedvm_exec(struct embedvm_s *vm)
 		}
 		break;
 	case 0xb0 ... 0xb0+15:
-		a = vm->call_user(opcode - 0xb0, vm->sp, vm->user_ctx);
-		embedvm_push(vm, a);
+		{
+			uint8_t argc = embedvm_pop(vm);
+			int16_t argv[argc];
+			for (sfa=0; sfa<argc; sfa++)
+				argv[sfa] = embedvm_pop(vm);
+			a = vm->call_user(opcode - 0xb0, argc, argv, vm->user_ctx);
+			embedvm_push(vm, a);
+		}
 		vm->ip++;
 		break;
 	case 0xc0 ... 0xef:

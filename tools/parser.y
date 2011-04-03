@@ -30,16 +30,17 @@ void yyerror (char const *s) {
 
 struct nametab_entry_s {
 	char *name;
-	int type, index;
+	int type, index, num_args;
 	struct evm_insn_s *addr;
 	struct nametab_entry_s *next;
+	bool is_forward_decl;
 };
 
 struct nametab_entry_s *local_ids;
 struct nametab_entry_s *global_ids;
 
-static void add_nametab_local(char *name, int index);
-static void add_nametab_global(char *name, int type, struct evm_insn_s *addr);
+static struct nametab_entry_s *add_nametab_local(char *name, int index);
+static struct nametab_entry_s *add_nametab_global(char *name, int type, struct evm_insn_s *addr);
 static struct nametab_entry_s *find_nametab_entry(char *name);
 static struct nametab_entry_s *find_global_nametab_entry(char *name);
 
@@ -62,6 +63,7 @@ struct func_call_args_desc_s {
 
 %token TOK_IF TOK_ELSE TOK_DO TOK_FOR TOK_WHILE TOK_RETURN TOK_FUNCTION
 %token TOK_LOCAL TOK_GLOBAL TOK_ARRAY_8U TOK_ARRAY_8S TOK_ARRAY_16
+%token TOK_LINE TOK_ADDR TOK_EXTERN TOK_MEMADDR TOK_TRAMPOLINE
 
 %left TOK_LOR
 %left TOK_LAND
@@ -81,7 +83,7 @@ struct func_call_args_desc_s {
 
 %right NEG
 
-%type <insn> program global_data function_def function_body
+%type <insn> program meta_statement global_data function_def function_body
 %type <insn> statement_list statement core_statement lvalue expression
 
 %type <number> function_args function_vars function_var_list;
@@ -101,16 +103,33 @@ program:
 	/* empty */ {
 		$$ = NULL;
 	} |
-/*
 	program meta_statement {
 		$$ = new_insn($1, $2);
 	} |
-*/
 	program global_data {
 		$$ = new_insn($1, $2);
 	} |
 	program function_def {
 		$$ = new_insn($1, $2);
+	};
+
+meta_statement:
+	TOK_MEMADDR TOK_NUMBER {
+		$$ = new_insn(NULL, NULL);
+		$$->symbol = strdup(".memaddr");
+		$$->has_set_addr = true;
+		$$->set_addr = $2;
+	} |
+	TOK_TRAMPOLINE TOK_NUMBER TOK_ID {
+		struct nametab_entry_s *e = find_global_nametab_entry($3);
+		if (!e || e->type != VARTYPE_FUNC) {
+			fprintf(stderr, "Unkown function `%s' in line %d!\n", $3, yyget_lineno());
+			exit(1);
+		}
+		$$ = new_insn_op_reladdr(0xa0 + 1, e->addr, NULL, NULL);
+		$$->symbol = strdup(".trampoline");
+		$$->has_set_addr = true;
+		$$->set_addr = $2;
 	};
 
 global_data:
@@ -135,23 +154,49 @@ global_data:
 		add_nametab_global($2, VARTYPE_GLOBAL_16, $$);
 	};
 
+function_head:
+	TOK_FUNCTION { local_ids=NULL; };
+
 function_def:
-	TOK_FUNCTION { local_ids=NULL; } TOK_ID '(' function_args ')' '{' function_vars function_body '}' {
-		int local_vars = $8;
+	function_head TOK_ID '(' function_args ')' ';' {
+		struct nametab_entry_s *e = add_nametab_global($2, VARTYPE_FUNC, $$);
+		e->num_args = $4;
+		e->addr = new_insn(NULL, NULL);
+		e->is_forward_decl = true;
+		$$ = NULL;
+	} |
+	function_head TOK_ID '(' function_args ')' '{' function_vars function_body '}' {
+		int local_vars = $7;
 		struct evm_insn_s *alloc_local = NULL;
 		while (local_vars > 0) {
 			int this_num = local_vars > 8 ? 8 : local_vars;
 			alloc_local = new_insn_op(0xf0 + (this_num-1), alloc_local, NULL);
 			local_vars -= this_num;
 		}
-		$$ = new_insn(alloc_local, $9);
+		$$ = new_insn(alloc_local, $8);
 		struct evm_insn_s *last_insn = $$;
 		while (last_insn->right != NULL)
 			last_insn = last_insn->right;
 		if (last_insn->opcode != 0x9b && last_insn->opcode != 0x9c)
 			$$ = new_insn_op(0x9c, $$, NULL);
-		add_nametab_global($3, VARTYPE_FUNC, $$);
-		$$->symbol = strdup($3);
+		struct nametab_entry_s *e = find_global_nametab_entry($2);
+		if (e) {
+			if (!e->is_forward_decl) {
+				fprintf(stderr, "Error in line %d: Re-declaration of identifier `%s'\n", yyget_lineno(), $2);
+				exit(1);
+			}
+			if (e->num_args != $4) {
+				fprintf(stderr, "Error in line %d: Declaration and implementation of `%s'\nhave a different number of arguments!\n", yyget_lineno(), $2);
+				exit(1);
+			}
+			e->is_forward_decl = false;
+			$$ = new_insn(e->addr, $$);
+			e->addr = $$;
+		} else {
+			e = add_nametab_global($2, VARTYPE_FUNC, $$);
+			e->num_args = $4;
+		}
+		$$->symbol = strdup($2);
 	};
 
 function_args:
@@ -301,6 +346,13 @@ expression:
 	TOK_NUMBER {
 		$$ = new_insn_op_val(0x9a, $1, NULL, NULL);
 	} |
+	TOK_LINE {
+		$$ = new_insn_op_val(0x9a, yyget_lineno(), NULL, NULL);
+	} |
+	TOK_ADDR {
+		struct evm_insn_s *here = new_insn(NULL, NULL);
+		$$ = new_insn_op_absaddr(0x9a, here, here, NULL);
+	} |
 	'(' expression ')' {
 		$$ = $2;
 	} |
@@ -355,6 +407,10 @@ expression:
 			fprintf(stderr, "Unkown function `%s' in line %d!\n", $1, yyget_lineno());
 			exit(1);
 		}
+		if (e->num_args != $3->num) {
+			fprintf(stderr, "Call of function `%s' with incorrect number of arguments in line %d!\n", $1, yyget_lineno());
+			exit(1);
+		}
 		struct evm_insn_s *popargs = NULL;
 		while ($3->num > 0) {
 			int this_num = $3->num > 8 ? 8 : $3->num;
@@ -364,13 +420,8 @@ expression:
 		$$ = new_insn_op_reladdr(0xa0 + 3, e->addr, $3->insn, popargs);
 	} |
 	TOK_USERFUNC '(' func_call_args ')' {
-		struct evm_insn_s *popargs = NULL;
-		while ($3->num > 0) {
-			int this_num = $3->num > 8 ? 8 : $3->num;
-			popargs = new_insn_op(0xf8 + (this_num-1), popargs, NULL);
-			$3->num -= this_num;
-		}
-		$$ = new_insn_op(0xb0 + $1, $3->insn, popargs);
+		$$ = new_insn_op_val(0x9a, $3->num, $3->insn, NULL);
+		$$ = new_insn_op(0xb0 + $1, $$, NULL);
 	} |
 	'+' expression %prec NEG {
 		$$ = $2;
@@ -464,24 +515,36 @@ func_call_args:
 
 %%
 
-static void add_nametab_local(char *name, int index)
+static struct nametab_entry_s *add_nametab_local(char *name, int index)
 {
-	struct nametab_entry_s *e = calloc(1, sizeof(struct nametab_entry_s));
+	struct nametab_entry_s *e = find_nametab_entry(name);
+	if (e) {
+		fprintf(stderr, "Error in line %d: Re-declaration of identifier `%s'\n", yyget_lineno(), name);
+		exit(1);
+	}
+	e = calloc(1, sizeof(struct nametab_entry_s));
 	e->name = name;
 	e->type = VARTYPE_LOCAL;
 	e->index = index;
 	e->next = local_ids;
 	local_ids = e;
+	return e;
 }
 
-static void add_nametab_global(char *name, int type, struct evm_insn_s *addr)
+static struct nametab_entry_s *add_nametab_global(char *name, int type, struct evm_insn_s *addr)
 {
-	struct nametab_entry_s *e = calloc(1, sizeof(struct nametab_entry_s));
+	struct nametab_entry_s *e = find_global_nametab_entry(name);
+	if (e) {
+		fprintf(stderr, "Error in line %d: Re-declaration of identifier `%s'\n", yyget_lineno(), name);
+		exit(1);
+	}
+	e = calloc(1, sizeof(struct nametab_entry_s));
 	e->name = name;
 	e->type = type;
 	e->addr = addr;
 	e->next = global_ids;
 	global_ids = e;
+	return e;
 }
 
 struct nametab_entry_s *find_nametab_entry(char *name)

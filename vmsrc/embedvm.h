@@ -30,7 +30,7 @@ struct embedvm_s
 
 	int16_t (*mem_read)(uint16_t addr, bool is16bit, void *ctx);
 	void (*mem_write)(uint16_t addr, int16_t value, bool is16bit, void *ctx);
-	int16_t (*call_user)(uint8_t funcid, uint16_t args, void *ctx);
+	int16_t (*call_user)(uint8_t funcid, uint8_t argc, int16_t *argv, void *ctx);
 };
 
 extern void embedvm_exec(struct embedvm_s *vm);

@@ -35,13 +35,15 @@ enum evm_var_type {
 struct evm_insn_s {
 	bool has_opcode;
 	bool arg_is_relative;
+	bool arg_did_grow_again;
+	bool has_set_addr;
 	uint8_t has_arg_data;
 	uint8_t opcode;
 	int16_t arg_val;
 	uint16_t data_len;
 	struct evm_insn_s *arg_addr;
 	struct evm_insn_s *left, *right;
-	uint16_t addr;
+	uint16_t addr, set_addr;
 	char *symbol;
 };
 
@@ -62,13 +64,15 @@ extern struct evm_insn_s *new_insn_op_val(uint8_t opcode, int16_t val,
 extern struct evm_insn_s *new_insn_data(uint16_t len,
 		struct evm_insn_s *left, struct evm_insn_s *right);
 
+extern void insn_dump(struct evm_insn_s *insn, char *type, int indent);
+
 extern uint16_t codegen_len;
 extern struct evm_insn_s *codegen_insn;
 extern void codegen(struct evm_insn_s *insn);
 
-void write_debug(FILE *f, struct evm_insn_s *insn);
-void write_symbols(FILE *f, struct evm_insn_s *insn);
-void write_binfile(FILE *f, struct evm_insn_s *insn);
+extern void write_debug(FILE *f, struct evm_insn_s *insn);
+extern void write_symbols(FILE *f, struct evm_insn_s *insn);
+extern void write_binfile(FILE *f, struct evm_insn_s *insn);
 
 extern int yydebug;
 extern int yylex(void);

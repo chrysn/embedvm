@@ -17,6 +17,9 @@
  *
  */
 
+
+$memaddr 0x0010
+
 global x;
 global y;
 global z;
@@ -57,7 +60,10 @@ function demo()
 	userfunc1(1);
 	userfunc2(2, 3);
 	userfunc3(4, 5, 6);
-	// userfunc1(sum3(1, 10, 100));
+	userfunc4($line, $addr);
+	// userfunc5(sum3(1, 10, 100));
 	userfunc0();
 }
+
+$trampoline 0x0000 demo
 
