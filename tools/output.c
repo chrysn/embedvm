@@ -55,13 +55,27 @@ void write_debug(FILE *f, struct evm_insn_s *insn)
 	write_debug(f, insn->right);
 }
 
+struct symbol_s {
+	char *name;
+	uint16_t addr;
+	struct symbol_s *next;
+};
+
+struct symbol_s *symbols;
+
 void write_symbols(FILE *f, struct evm_insn_s *insn)
 {
 	if (!insn)
 		return;
 
-	if (insn->symbol)
+	if (insn->symbol) {
+		struct symbol_s *sym = calloc(1, sizeof(struct symbol_s));
+		sym->name = strdup(insn->symbol);
+		sym->addr = insn->addr;
+		sym->next = symbols;
+		symbols = sym;
 		fprintf(f, "%04X %s\n", insn->addr, insn->symbol);
+	}
 
 	write_symbols(f, insn->left);
 	write_symbols(f, insn->right);
@@ -133,9 +147,15 @@ void write_binfile(FILE *f, struct evm_insn_s *insn)
 extern void write_header(FILE *f)
 {
 	struct evm_section_s *sect = sections;
+	struct symbol_s *sym = symbols;
 	int i;
 
 	memset(bindata_covered, 0, sizeof(bindata_data));
+
+	while (sym) {
+		fprintf(f, "#define EMBEDVM_SYM_%s 0x%04x\n", sym->name, sym->addr);
+		sym = sym->next;
+	}
 
 	while (sect) {
 		int real_end = sect->end;

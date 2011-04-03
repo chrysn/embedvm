@@ -1,7 +1,4 @@
 
-function main();
-$trampoline 0x0000 main
-
 global points;
 
 function main()
@@ -10,26 +7,29 @@ function main()
 	points = 0;
 	while (1)
 	{
+		// report points
+		$uf4();
+
 		// get next random number
-		num = userfuc0();
+		num = $uf0();
 		do {
 			// read next guess
-			guess = userfuc1();
+			guess = $uf1();
 			if (guess < num) {
 				// hint to user: try larger numbers
-				userfuc2(+1);
-				points--;
+				$uf2(+1);
+				points = points - 1;
 			}
 			if (guess > num) {
 				// hint to user: try smaller numbers
-				userfuc2(-1);
-				points--;
+				$uf2(-1);
+				points = points - 1;
 			}
 		} while (guess != num);
 
 		// level up!
-		points += 10;
-		userfuc3();
+		points = points + 10;
+		$uf3();
 	}
 }
 

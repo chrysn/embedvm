@@ -49,7 +49,7 @@ function init()
 		array_8bit_unsigned[i] = i;
 		array_8bit_signed[i] = -i;
 		array_16bit[i] = i * 500 * (i%2 == 0 ? +1 : -1);
-		userfunc2(i, array_16bit[i]);
+		$uf2(i, array_16bit[i]);
 	}
 	x = 1;
 	y = 2;
@@ -63,18 +63,18 @@ function demo()
 	init();
 	sum_loop();
 
-	userfunc1(1);
-	userfunc2(2, 3);
-	userfunc3(4, 5, 6);
-	userfunc4($line, $addr);
-	userfunc5(sum3(1, 10, 100));
+	$uf1(1);
+	$uf2(2, 3);
+	$uf3(4, 5, 6);
+	$uf4($line, $addr);
+	$uf5(sum3(1, 10, 100));
 
 	for (i=0; i<16; i=i+1)
-		sum = userfunc6(sum, array_16bit[i]);
+		sum = $uf6(sum, array_16bit[i]);
 
-	userfunc7(userfunc6(-sum) + 2920);
+	$uf7($uf6(-sum) + 2920);
 
-	userfunc0();
+	$uf0();
 }
 
 $trampoline 0x0000 demo
