@@ -1,0 +1,54 @@
+#!/usr/bin/env splrun
+
+var timestep = 119;
+
+var line;
+var ontime, offtime, tone;
+var min_tone, min_on, min_off;
+var max_tone, max_on, max_off;
+
+function min(a, b)
+{
+	if (not defined a)
+		return b;
+	if (not defined b)
+		return a;
+	return a < b ? a : b;
+}
+
+function max(a, b)
+{
+	if (not defined a)
+		return b;
+	if (not defined b)
+		return a;
+	return a > b ? a : b;
+}
+
+for (line = read(); defined line; line = read())
+{
+	var f = line =~ /, */Sg;
+	if (defined offtime) {
+		var onduration = round((offtime - ontime) ./ timestep);
+		var offduration = round((+f[1] - offtime) ./ timestep);
+		write("$tone $onduration $offduration\n");
+		min_on = min(min_on, onduration);
+		max_on = max(max_on, onduration);
+		min_off = min(min_off, offduration);
+		max_off = max(max_off, offduration);
+		offtime = undef;
+	}
+	if (f[2] ~== "Note_on_c") {
+		ontime = +f[1];
+		offtime = undef;
+		tone = +f[4];
+		min_tone = min(min_tone, tone);
+		max_tone = max(max_tone, tone);
+	}
+	if (f[2] ~== "Note_off_c") {
+		offtime = +f[1];
+	}
+}
+
+debug "min_tone = $min_tone, max_tone = $max_tone, min_on = $min_on, max_on = $max_on, min_off = $min_off, max_off = $max_off";
+

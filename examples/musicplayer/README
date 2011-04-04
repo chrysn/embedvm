@@ -1,0 +1,10 @@
+
+** Under construction **
+
+The file 'melody.csv' has been created using midicsv [1]. It can be played on a
+Linux system using the following command:
+
+	$ csvmidi melody.csv melody.mid && timidity melody.mid
+
+[1] http://www.fourmilab.ch/webtools/midicsv/
+
