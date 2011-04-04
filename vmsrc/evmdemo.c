@@ -67,7 +67,7 @@ static int16_t call_user(uint8_t funcid, uint8_t argc, int16_t *argv, void *ctx 
 }
 
 struct embedvm_s vm = {
-	0, 0, 0, NULL,
+	0xffff, 0, 0, NULL,
 	&mem_read, &mem_write, &call_user
 };
 
@@ -90,10 +90,14 @@ exit_with_helpmsg:
 		memory[addr] = ch;
 	fclose(f);
 
-	vm.ip = strtol(argv[2], NULL, 16);
+	embedvm_interrupt(&vm, strtol(argv[2], NULL, 16));
 
 	stop = false;
 	while (!stop) {
+		if (vm.ip == 0xffff) {
+			printf("Main function returned => Terminating.\n");
+			break;
+		}
 #if 0
 		printf("IP: %04x (%02x %02x %02x %02x),  ", vm.ip,
 				memory[vm.ip], memory[vm.ip+1], memory[vm.ip+2], memory[vm.ip+3]);

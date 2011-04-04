@@ -74,7 +74,7 @@ function demo()
 
 	$uf7($uf6(-sum) + 2914);
 
-	$uf0();
+	// $uf0();
 }
 
 $trampoline 0x0000 demo

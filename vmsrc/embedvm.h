@@ -34,6 +34,7 @@ struct embedvm_s
 };
 
 extern void embedvm_exec(struct embedvm_s *vm);
+extern void embedvm_interrupt(struct embedvm_s *vm, uint16_t addr);
 
 int16_t embedvm_pop(struct embedvm_s *vm);
 void embedvm_push(struct embedvm_s *vm, int16_t value);

@@ -254,6 +254,14 @@ extern void embedvm_exec(struct embedvm_s *vm)
 	}
 }
 
+void embedvm_interrupt(struct embedvm_s *vm, uint16_t addr)
+{
+	embedvm_push(vm, vm->sfp);
+	embedvm_push(vm, vm->ip);
+	vm->sfp = vm->sp;
+	vm->ip = addr;
+}
+
 int16_t embedvm_pop(struct embedvm_s *vm)
 {
 	int16_t value = vm->mem_read(vm->sp, true, vm->user_ctx);
