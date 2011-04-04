@@ -1,6 +1,9 @@
 #!/usr/bin/env splrun
 
-var timestep = 119;
+var timestep = 12;
+
+var tones, timings;
+var melody;
 
 var line;
 var ontime, offtime, tone;
@@ -31,7 +34,12 @@ for (line = read(); defined line; line = read())
 	if (defined offtime) {
 		var onduration = round((offtime - ontime) ./ timestep);
 		var offduration = round((+f[1] - offtime) ./ timestep);
-		write("$tone $onduration $offduration\n");
+		// write("$tone $onduration $offduration\n");
+		if (not declared tones["$tone"])
+			tones["$tone"] = elementsof tones;
+		if (not declared timings["$onduration $offduration"])
+			timings["$onduration $offduration"] = elementsof timings;
+		push melody, (tones["$tone"] * 32) + tones["$onduration $offduration"];
 		min_on = min(min_on, onduration);
 		max_on = max(max_on, onduration);
 		min_off = min(min_off, offduration);
@@ -50,5 +58,31 @@ for (line = read(); defined line; line = read())
 	}
 }
 
-debug "min_tone = $min_tone, max_tone = $max_tone, min_on = $min_on, max_on = $max_on, min_off = $min_off, max_off = $max_off";
+write("array16 melody_freq[${elementsof(tones)}] = {");
+foreach t (tones) {
+	var freq = round(440 * 2**((t-69)./12));
+	write("$freq${ $] ? "" : "," }");
+}
+write("};\n");
+
+write("array8u melody_timing_on[${elementsof(timings)}] = {");
+foreach t (timings) {
+	write("${ t =~ s/ .*//R }${ $] ? "" : "," }");
+}
+write("};\n");
+
+write("array8u melody_timing_off[${elementsof(timings)}] = {");
+foreach t (timings) {
+	write("${ t =~ s/.* //R }${ $] ? "" : "," }");
+}
+write("};\n");
+
+write("array8u melody_data[${elementsof(melody)+1}] = {");
+foreach[] note (melody) {
+	write("$note,");
+}
+write("255};\n");
+
+// write("min_tone = $min_tone, max_tone = $max_tone, min_on = $min_on, max_on = $max_on, "
+// 		"min_off = $min_off, max_off = $max_off\n");
 
