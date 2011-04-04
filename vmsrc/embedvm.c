@@ -192,7 +192,7 @@ extern void embedvm_exec(struct embedvm_s *vm)
 			break;
 		case 4:
 			addr = (embedvm_pop(vm) << sfa) + vm->mem_read(vm->ip+1, true, vm->user_ctx);
-			vm->ip += 2;
+			vm->ip += 3;
 			break;
 		}
 		switch ((opcode >> 3) & 0x07)
