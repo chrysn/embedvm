@@ -479,11 +479,9 @@ expression:
 		$$ = new_insn_op(0x80 + 9, new_insn($1, $3), NULL);
 	} |
 	expression TOK_LAND expression {
-		// TBD: Skip 2nd expr if 1st is already false
 		$$ = new_insn_op(0x80 + 10, new_insn($1, $3), NULL);
 	} |
 	expression TOK_LOR expression {
-		// TBD: Skip 2nd expr if 1st is already true
 		$$ = new_insn_op(0x80 + 11, new_insn($1, $3), NULL);
 	} |
 	'~' expression %prec NEG {
