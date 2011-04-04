@@ -79,10 +79,10 @@
 "|="		return TOK_ASSIGN_OR;
 "^="		return TOK_ASSIGN_XOR;
 
-[1-9][0-9]* { yylval.number = atoi(yytext); return TOK_NUMBER; }
-"0"[0-7]* { yylval.number = strtol(yytext+2, NULL, 8); return TOK_NUMBER; }
-"0b"[01]+ { yylval.number = strtol(yytext+2, NULL, 2); return TOK_NUMBER; }
-"0x"[0-9a-fA-F]+ { yylval.number = strtol(yytext+2, NULL, 16); return TOK_NUMBER; }
+[1-9][0-9]*		{ yylval.number = atoi(yytext); return TOK_NUMBER; }
+"0"[0-7]*		{ yylval.number = strtol(yytext+1, NULL, 8); return TOK_NUMBER; }
+"0b"[01]+		{ yylval.number = strtol(yytext+2, NULL, 2); return TOK_NUMBER; }
+"0x"[0-9a-fA-F]+	{ yylval.number = strtol(yytext+2, NULL, 16); return TOK_NUMBER; }
 
 [a-zA-Z_][a-zA-Z0-9_]* { yylval.string = strdup(yytext); return TOK_ID; }
 

@@ -180,6 +180,7 @@ extern void embedvm_exec(struct embedvm_s *vm)
 			for (sfa = depth; sfa > 0; sfa--)
 				embedvm_push(vm, stack[sfa]);
 			embedvm_push(vm, stack[0]);
+			vm->ip++;
 			break;
 		}
 		if ((opcode & 0x07) == 6) {
@@ -191,6 +192,7 @@ extern void embedvm_exec(struct embedvm_s *vm)
 			for (sfa = depth+1; sfa > 0; sfa--)
 				embedvm_push(vm, stack[sfa-1]);
 			embedvm_push(vm, stack[depth+1]);
+			vm->ip++;
 			break;
 		}
 		sfa = ((opcode >> 3) & 0x07) == 4 || ((opcode >> 3) & 0x07) == 5 ? 1 : 0;

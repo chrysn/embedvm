@@ -1,0 +1,19 @@
+Called user function 1 with 3 args: 1 -1 1000
+Called user function 1 with 3 args: 2 -2 2000
+Called user function 1 with 3 args: 3 -3 3000
+Called user function 1 with 3 args: 4 -4 4000
+Called user function 1 with 3 args: 5 -5 5000
+Called user function 2 with 0 args:
+Called user function 1 with 3 args: 2 -2 1002
+Called user function 1 with 3 args: 3 -3 2003
+Called user function 1 with 3 args: 4 -4 3004
+Called user function 1 with 3 args: 5 -5 4005
+Called user function 1 with 3 args: 6 -6 5006
+Called user function 2 with 0 args:
+Called user function 1 with 3 args: 200 100 111
+Called user function 1 with 3 args: 201 -100 222
+Called user function 1 with 3 args: 202 100 333
+Called user function 1 with 3 args: 203 -100 444
+Called user function 1 with 3 args: 204 100 555
+Called user function 2 with 0 args:
+Main function returned => Terminating.

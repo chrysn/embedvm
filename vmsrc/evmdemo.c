@@ -77,10 +77,17 @@ int main(int argc, char **argv)
 {
 	FILE *f;
 	int ch, addr;
+	char *prog = argv[0];
+	bool verbose = false;
+
+	if (argc >= 2 && !strcmp(argv[1], "-v")) {
+		verbose = true;
+		argc--, argv++;
+	}
 
 	if (argc != 3) {
 exit_with_helpmsg:
-		fprintf(stderr, "Usage: %s [binfile] [hex-start-addr]\n", argv[0]);
+		fprintf(stderr, "Usage: %s [-v] {binfile} {hex-start-addr}\n", prog);
 		return 1;
 	}
 
@@ -101,17 +108,17 @@ exit_with_helpmsg:
 			fflush(stdout);
 			break;
 		}
-#if 0
-		fprintf(stderr, "IP: %04x (%02x %02x %02x %02x),  ", vm.ip,
-				memory[vm.ip], memory[vm.ip+1], memory[vm.ip+2], memory[vm.ip+3]);
-		fprintf(stderr, "SP: %04x (%02x%02x %02x%02x %02x%02x %02x%02x), ", vm.sp,
-				memory[vm.sp + 0], memory[vm.sp + 1],
-				memory[vm.sp + 2], memory[vm.sp + 3],
-				memory[vm.sp + 4], memory[vm.sp + 5],
-				memory[vm.sp + 6], memory[vm.sp + 7]);
-		fprintf(stderr, "SFP: %04x\n", vm.sfp);
-		fflush(stderr);
-#endif
+		if (verbose) {
+			fprintf(stderr, "IP: %04x (%02x %02x %02x %02x),  ", vm.ip,
+					memory[vm.ip], memory[vm.ip+1], memory[vm.ip+2], memory[vm.ip+3]);
+			fprintf(stderr, "SP: %04x (%02x%02x %02x%02x %02x%02x %02x%02x), ", vm.sp,
+					memory[vm.sp + 0], memory[vm.sp + 1],
+					memory[vm.sp + 2], memory[vm.sp + 3],
+					memory[vm.sp + 4], memory[vm.sp + 5],
+					memory[vm.sp + 6], memory[vm.sp + 7]);
+			fprintf(stderr, "SFP: %04x\n", vm.sfp);
+			fflush(stderr);
+		}
 		embedvm_exec(&vm);
 	}
 

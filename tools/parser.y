@@ -101,9 +101,11 @@ struct func_call_args_desc_s {
 %token TOK_ASSIGN_SHL TOK_ASSIGN_SHR TOK_ASSIGN_AND TOK_ASSIGN_OR TOK_ASSIGN_XOR
 
 %type <insn> program meta_statement global_data function_def function_body
-%type <insn> statement_list statement core_statement lvalue func_expression expression
+%type <insn> statement_list statement core_statement lvalue func_expression
+%type <insn> expression
 
-%type <number> function_args function_vars function_var_list array_type combined_assign;
+%type <number> function_args function_vars function_var_list
+%type <number> array_type combined_assign number
 %type <ainit> array_init array_init_data
 %type <vp> global_var_init
 %type <fc> func_call_args
@@ -174,17 +176,22 @@ array_type:
 	TOK_ARRAY_8S { $$ = VARTYPE_GLOBAL_8S; } |
 	TOK_ARRAY_16 { $$ = VARTYPE_GLOBAL_16; };
 
+number:
+	TOK_NUMBER { $$ = $1; } |
+	'+' TOK_NUMBER { $$ = $2; } |
+	'-' TOK_NUMBER { $$ = -$2; };
+
 array_init_data:
 	/* empty */ {
 		$$.len = 0;
 		$$.data = NULL;
 	} |
-	TOK_NUMBER {
+	number {
 		$$.len = 1;
 		$$.data = malloc(64 * sizeof(int));
 		$$.data[0] = $1;
 	} |
-	array_init_data ',' TOK_NUMBER {
+	array_init_data ',' number {
 		$$ = $1;
 		$$.len++;
 		$$.data = realloc($$.data, 64 * ($$.len/64 + 1) * sizeof(int));
@@ -197,7 +204,7 @@ array_init:
 
 global_var_init:
 	/* empty */ { $$ = NULL; } |
-	'=' TOK_NUMBER {
+	'=' number {
 		uint8_t *p = malloc(2);
 		p[0] = $2 >> 8;
 		p[1] = $2;
@@ -570,13 +577,25 @@ expression:
 		$$ = new_insn_op(0x80 + 11, new_insn($1, $3), NULL);
 	} |
 	'~' expression %prec NEG {
-		$$ = new_insn_op(0x80 + 12, $2, NULL);
+		if ($2->opcode == 0x9a) {
+			$2->arg_val = ~$2->arg_val;
+			$$ = $2;
+		} else
+			$$ = new_insn_op(0x80 + 12, $2, NULL);
 	} |
 	'-' expression %prec NEG {
-		$$ = new_insn_op(0x80 + 13, $2, NULL);
+		if ($2->opcode == 0x9a) {
+			$2->arg_val = -$2->arg_val;
+			$$ = $2;
+		} else
+			$$ = new_insn_op(0x80 + 13, $2, NULL);
 	} |
 	'!' expression %prec NEG {
-		$$ = new_insn_op(0x80 + 14, $2, NULL);
+		if ($2->opcode == 0x9a) {
+			$2->arg_val = !$2->arg_val;
+			$$ = $2;
+		} else
+			$$ = new_insn_op(0x80 + 14, $2, NULL);
 	} |
 	expression '<' expression {
 		$$ = new_insn_op(0xa8 + 0, new_insn($1, $3), NULL);
@@ -663,7 +682,6 @@ static struct evm_insn_s *generate_combined_assign(struct evm_insn_s *lv,
 		/* inject dup */
 		insn->left = new_insn_op(0xc5, insn->left, NULL);
 		lvalue_prep = true;
-		lv->left = NULL;
 	}
 
 	/* copy old value for postfix */
