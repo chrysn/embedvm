@@ -1,6 +1,7 @@
 #!/usr/bin/env splrun
 
-var timestep = 12;
+var timestep = 6;
+var timescale = 6;
 
 var tones, timings;
 var melody;
@@ -39,7 +40,7 @@ for (line = read(); defined line; line = read())
 			tones["$tone"] = elementsof tones;
 		if (not declared timings["$onduration $offduration"])
 			timings["$onduration $offduration"] = elementsof timings;
-		push melody, (tones["$tone"] * 32) + tones["$onduration $offduration"];
+		push melody, (tones["$tone"] * 32) + timings["$onduration $offduration"];
 		min_on = min(min_on, onduration);
 		max_on = max(max_on, onduration);
 		min_off = min(min_off, offduration);
@@ -92,12 +93,13 @@ write(<:>
 	:	local i;
 	:	for (i=0; melody_data[i] != 0xff; i++) {
 	:		$$uf0(i, melody_data[i], melody_data[i] >> 5, melody_data[i] & 31,
+	:				melody_freq[melody_data[i] >> 5],
 	:				melody_timing_on[melody_data[i] & 31],
 	:				melody_timing_off[melody_data[i] & 31]);
 	:		$$uf1(melody_freq[melody_data[i] >> 5]);
-	:		$$uf2(10 * melody_timing_on[melody_data[i] & 31]);
+	:		$$uf2($timescale * melody_timing_on[melody_data[i] & 31]);
 	:		$$uf1(0);
-	:		$$uf2(10 * melody_timing_off[melody_data[i] & 31]);
+	:		$$uf2($timescale * melody_timing_off[melody_data[i] & 31]);
 	:	}
 	: }
 </>);

@@ -55,7 +55,7 @@
 "$uf"[0-8]	{ yylval.number = yytext[3] - '0'; return TOK_USERFUNC; }
 
 "<<"		return TOK_SHL;
-">>"		return TOK_SHL;
+">>"		return TOK_SHR;
 
 "&&"		return TOK_LAND;
 "||"		return TOK_LOR;

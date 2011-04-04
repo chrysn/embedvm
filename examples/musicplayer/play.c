@@ -5,6 +5,8 @@
 #include "embedvm.h"
 #include "vmcode.hdr"
 
+#undef DEBUG
+
 #define UNUSED __attribute__((unused))
 
 FILE *aplay_pipe = NULL;
@@ -36,22 +38,29 @@ void mem_write(uint16_t addr, int16_t value, bool is16bit, void *ctx UNUSED)
 
 int16_t call_user(uint8_t funcid, uint8_t argc, int16_t *argv, void *ctx UNUSED)
 {
+#ifdef DEBUG
 	if (funcid == 0) {
 		int i;
 		fprintf(stderr, " d");
 		for (i=0; i<argc; i++)
 			fprintf(stderr, ":%d", argv[i]);
-		f = argv[0];
 	}
+#endif
 	if (funcid == 1 && argc == 1) {
+#ifdef DEBUG
 		fprintf(stderr, " f:%d", argv[0]);
+#endif
 		f = argv[0];
 	}
 	if (funcid == 2 && argc == 1) {
 		int start = t;
+#ifdef DEBUG
 		fprintf(stderr, " w:%d", argv[0]);
+#endif
 		while (((t++)-start) < argv[0]*44) {
-			int16_t sample = htons(100*sin(2*M_PI*t*f/44100.0));
+			double v = sin(2*M_PI*t*f/44100.0);
+			v = f == 0 ? 0 : (v > 0 ? 1 : -1);
+			int16_t sample = htons(3000*v);
 			fwrite(&sample, 2, 1, aplay_pipe);
 		}
 	}
@@ -73,6 +82,10 @@ int main()
 	while (vm.ip != 0xffff) {
 		embedvm_exec(&vm);
 	}
+
+#ifdef DEBUG
+	fprintf(stderr, "\n");
+#endif
 
 	return 0;
 }
