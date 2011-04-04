@@ -110,7 +110,6 @@ extern void embedvm_exec(struct embedvm_s *vm)
 		vm->ip = embedvm_pop(vm);
 		vm->sfp = embedvm_pop(vm);
 		embedvm_push(vm, a);
-		vm->ip++;
 		break;
 	case 0x9d:
 		embedvm_pop(vm);

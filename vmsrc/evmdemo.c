@@ -51,6 +51,7 @@ static int16_t call_user(uint8_t funcid, uint8_t argc, int16_t *argv, void *ctx 
 	if (funcid == 0) {
 		stop = true;
 		printf("Called user function 0 => stop.\n");
+		fflush(stdout);
 		return ret;
 	}
 
@@ -62,6 +63,7 @@ static int16_t call_user(uint8_t funcid, uint8_t argc, int16_t *argv, void *ctx 
 	}
 
 	printf("\n");
+	fflush(stdout);
 
 	return ret ^ funcid;
 }
@@ -96,16 +98,19 @@ exit_with_helpmsg:
 	while (!stop) {
 		if (vm.ip == 0xffff) {
 			printf("Main function returned => Terminating.\n");
+			fflush(stdout);
 			break;
 		}
 #if 0
-		printf("IP: %04x (%02x %02x %02x %02x),  ", vm.ip,
+		fprintf(stderr, "IP: %04x (%02x %02x %02x %02x),  ", vm.ip,
 				memory[vm.ip], memory[vm.ip+1], memory[vm.ip+2], memory[vm.ip+3]);
-		printf("SP: %04x (%02x%02x %02x%02x %02x%02x %02x%02x)\n", vm.sp,
+		fprintf(stderr, "SP: %04x (%02x%02x %02x%02x %02x%02x %02x%02x), ", vm.sp,
 				memory[vm.sp + 0], memory[vm.sp + 1],
 				memory[vm.sp + 2], memory[vm.sp + 3],
 				memory[vm.sp + 4], memory[vm.sp + 5],
 				memory[vm.sp + 6], memory[vm.sp + 7]);
+		fprintf(stderr, "SFP: %04x\n", vm.sfp);
+		fflush(stderr);
 #endif
 		embedvm_exec(&vm);
 	}
