@@ -380,14 +380,14 @@ statement:
 	TOK_FOR '(' maybe_core_statement ';' expression ';' maybe_core_statement ')' loop_body {
 		struct evm_insn_s *end = $9->break_insn;
 		struct evm_insn_s *loop = new_insn_op_reladdr(0xa0 + 7, end, $5,
-				new_insn_op_reladdr(0xa0 + 1, $5,
-				new_insn($9->body_insn, $7), end));
-		$$ = new_insn($3, new_insn($9->continue_insn, loop));
+				new_insn_op_reladdr(0xa0 + 1, $5, new_insn($9->body_insn,
+				new_insn($9->continue_insn, $7)), end));
+		$$ = new_insn($3, loop);
 	} |
 	TOK_FOR '(' maybe_core_statement ';' ';' maybe_core_statement ')' loop_body {
 		$$ = new_insn($3, new_insn_op_reladdr(0xa0 + 1, $8->body_insn,
-				new_insn($8->body_insn, $6), NULL));
-		$$ = new_insn(new_insn($8->continue_insn, $$), $8->break_insn);
+				new_insn($8->body_insn, new_insn($8->continue_insn, $6)), NULL));
+		$$ = new_insn($$, $8->break_insn);
 	} |
 	TOK_BREAK ';' {
 		if (!loopctx_stack) {

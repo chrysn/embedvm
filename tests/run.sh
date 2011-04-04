@@ -34,7 +34,7 @@ for fn; do
 	if [ $# -gt 1 ]; then
 		echo; echo "=== $fn ==="
 	fi
-	v ../tools/evmcomp $fn
+	v ../tools/evmcomp $fn || exit 1
 	start=$( grep ' main$' ${fn%.evm}.sym | cut -f1 -d' ' ) 
 	if $verbose; then
 		v ../vmsrc/evmdemo $evmopt ${fn%.evm}.bin $start

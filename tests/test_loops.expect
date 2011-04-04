@@ -1,0 +1,34 @@
+Called user function 1 with 1 args: 0
+Called user function 1 with 1 args: 1
+Called user function 1 with 1 args: 2
+Called user function 1 with 1 args: 4
+Called user function 2 with 1 args: 5
+Called user function 2 with 1 args: 4
+Called user function 2 with 1 args: 3
+Called user function 2 with 1 args: 2
+Called user function 2 with 1 args: 1
+Called user function 3 with 2 args: 1 0
+Called user function 3 with 2 args: 3 1
+Called user function 3 with 2 args: 5 2
+Called user function 3 with 2 args: 7 3
+Called user function 3 with 2 args: 9 4
+Called user function 3 with 2 args: 11 5
+Called user function 3 with 2 args: 13 6
+Called user function 3 with 2 args: 15 7
+Called user function 3 with 2 args: 17 8
+Called user function 3 with 2 args: 19 9
+Called user function 4 with 1 args: 21
+Called user function 4 with 1 args: 22
+Called user function 5 with 2 args: 20 43
+Called user function 6 with 1 args: 43
+Called user function 5 with 2 args: 21 44
+Called user function 5 with 2 args: 22 45
+Called user function 6 with 1 args: 45
+Called user function 5 with 2 args: 23 46
+Called user function 5 with 2 args: 24 47
+Called user function 6 with 1 args: 47
+Called user function 5 with 2 args: 25 48
+Called user function 5 with 2 args: 26 49
+Called user function 6 with 1 args: 49
+Called user function 5 with 2 args: 27 50
+Main function returned => Terminating.

@@ -1,0 +1,39 @@
+
+function main()
+{
+	local i, k;
+
+	for (i=0; i<5; i++) {
+		if (i == 3)
+			continue;
+		$uf1(i);
+	}
+
+	do {
+		$uf2(i);
+	} while (--i > 0);
+
+	k = i;
+	while (i < 20) {
+		i++;
+		if (i % 2 == 0)
+			continue;
+		$uf3(i, k++);
+	}
+
+	while (i++ < 50) {
+		if (i == 23)
+			break;
+		$uf4(i);
+	}
+
+	for (k=i-3;; k++) {
+		$uf5(k, i+k);
+		if (i+k == 50)
+			break;
+		if ((i+k) % 2 == 0)
+			continue;
+		$uf6(i+k);
+	}
+}
+
