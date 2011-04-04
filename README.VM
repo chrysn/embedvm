@@ -58,7 +58,7 @@ on SFP + 2 and the parent stack frame pointer at SFP + 4.
 Instruction Encoding
 --------------------
 
-Most instructions fit in a single byte. Some have a 1 or 2 bytes arguments.
+Most instructions fit in a single byte. Some have a 1 or 2 bytes argument.
 Some instructions push and/or pop values to/from the stack.
 Not all of the instructions are actually used by the compiler.
 
