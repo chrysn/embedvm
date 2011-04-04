@@ -79,44 +79,52 @@ extern struct evm_insn_s *new_insn_data(uint16_t len,
 	return insn;
 }
 
-void insn_dump(struct evm_insn_s *insn, char *type, int indent)
+void insn_dump(FILE *f, struct evm_insn_s *insn, char *type, int indent)
 {
+	int i;
+
 	if (!insn)
 		return;
 
-	insn_dump(insn->left, "LEFT", indent+1);
+	insn_dump(f, insn->left, "LEFT", indent+1);
 
-	printf("%*s%s %p @ %04x %04x:", indent, "", type, insn, insn->addr, insn->inner_addr);
+	fprintf(f, "%*s%s %p @ %04x %04x:", indent, "", type, insn, insn->addr, insn->inner_addr);
 
 	if (insn->symbol)
-		printf(" sym=%s", insn->symbol);
+		fprintf(f, " sym=%s", insn->symbol);
 
 	if (insn->has_set_addr)
-		printf(" setaddr=%04x", insn->set_addr);
+		fprintf(f, " setaddr=%04x", insn->set_addr);
 
 	if (insn->has_opcode)
-		printf(" op=%02x", insn->opcode);
+		fprintf(f, " op=%02x", insn->opcode);
 
 	if (insn->has_arg_data == 1)
-		printf(" arg=%02x", insn->arg_val & 0xff);
+		fprintf(f, " arg=%02x", insn->arg_val & 0xff);
 
 	if (insn->has_arg_data == 2)
-		printf(" arg=%04x", insn->arg_val);
+		fprintf(f, " arg=%04x", insn->arg_val);
 
 	if (insn->arg_is_relative)
-		printf(" rel");
+		fprintf(f, " rel");
 
 	if (insn->arg_addr != NULL)
-		printf(" argaddr=%p", insn->arg_addr);
+		fprintf(f, " argaddr=%p", insn->arg_addr);
 
 	if (insn->arg_did_grow_again)
-		printf(" regrow");
+		fprintf(f, " regrow");
 
 	if (insn->data_len)
-		printf(" datalen=%d", insn->data_len);
+		fprintf(f, " datalen=%d", insn->data_len);
 
-	printf("\n");
+	if (insn->initdata) {
+		fprintf(f, " initdata=");
+		for (i=0; i<insn->data_len; i++)
+			fprintf(f, "%02x", insn->initdata[i]);
+	}
 
-	insn_dump(insn->right, "RIGHT", indent+1);
+	fprintf(f, "\n");
+
+	insn_dump(f, insn->right, "RIGHT", indent+1);
 }
 

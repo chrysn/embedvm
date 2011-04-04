@@ -171,6 +171,29 @@ extern void embedvm_exec(struct embedvm_s *vm)
 		vm->ip++;
 		break;
 	case 0xc0 ... 0xef:
+		if ((opcode & 0x07) == 5) {
+			/* this is a "bury" instruction */
+			uint8_t depth = (opcode >> 3) & 0x07;
+			int16_t stack[depth+1];
+			for (sfa = 0; sfa <= depth; sfa++)
+				stack[sfa] = embedvm_pop(vm);
+			embedvm_push(vm, stack[0]);
+			for (sfa = depth; sfa > 0; sfa--)
+				embedvm_push(vm, stack[sfa]);
+			embedvm_push(vm, stack[0]);
+			break;
+		}
+		if ((opcode & 0x07) == 6) {
+			/* this is a "dig" instruction */
+			uint8_t depth = (opcode >> 3) & 0x07;
+			int16_t stack[depth+2];
+			for (sfa = 0; sfa < depth+2; sfa++)
+				stack[sfa] = embedvm_pop(vm);
+			for (sfa = depth+1; sfa > 0; sfa--)
+				embedvm_push(vm, stack[sfa-1]);
+			embedvm_push(vm, stack[depth+1]);
+			break;
+		}
 		sfa = ((opcode >> 3) & 0x07) == 4 || ((opcode >> 3) & 0x07) == 5 ? 1 : 0;
 		switch (opcode & 0x07)
 		{

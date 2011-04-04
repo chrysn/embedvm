@@ -125,22 +125,29 @@ Not all of the instructions are actually used by the compiler.
 | 1 | 1 |     4     |     M     |       Load 16 (push 1, M is addr mode) | e0 |
 | 1 | 1 |     5     |     M     |       Store 16 (pop 1, M is addr mode) | e8 |
 +---+---+---+---+---+---+---+---+----------------------------------------+----+
+| 1 | 1 |     K     |     5     |     Bury dup of top in depth K (max 5) | // |
+| 1 | 1 |     K     |     6     |  Dig up the element in depth K (max 5) | // |
+| 1 | 1 |     K     |     7     |                               Reserved | // |
++---+---+---+---+---+---+---+---+----------------------------------------+----+
 | 1 | 1 |     6     |     N     |            Push N+1 zeros to the stack | f0 |
 +---+---+---+---+---+---+---+---+----------------------------------------+----+
 | 1 | 1 |     7     |     N     |            Pop N+1 values but keep top | f8 |
 +---+---+---+---+---+---+---+---+----------------------------------------+----+
 
-Asdress Modes (M) for "Load" and "Store" instructions:
+Adress Modes (M) for "Load" and "Store" instructions:
 
    0 ..... address as 1 byte (unsigned) argument
    1 ..... address as 2 byte argument
    2 ..... address as popped value (pop before data)
    3 ..... address as popped + 1 byte (unsigned) argument
    4 ..... address as popped + 2 byte argument
-   5-7 ... reserved
+   5-7 ... shuffle instructions (not load/store)
 
 Note: for 16bit load and store operations in mode 3 and 4 the popped
 data from the stack is multiplied by 2.
+
+A "bury" with K=0 simply duplicates the top element on the stack;
+A "dig" with K=0 exchages the two top elements on the stack
 
 
 Execution Model

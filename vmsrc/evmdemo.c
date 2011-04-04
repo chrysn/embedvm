@@ -61,8 +61,9 @@ static int16_t call_user(uint8_t funcid, uint8_t argc, int16_t *argv, void *ctx 
 		ret += argv[i];
 	}
 
-	printf(" => %d\n", ret);
-	return ret;
+	printf("\n");
+
+	return ret ^ funcid;
 }
 
 struct embedvm_s vm = {

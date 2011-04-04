@@ -24,6 +24,8 @@
 
 void write_debug(FILE *f, struct evm_insn_s *insn)
 {
+	int i;
+
 	if (!insn)
 		return;
 
@@ -36,6 +38,12 @@ void write_debug(FILE *f, struct evm_insn_s *insn)
 	{
 		if (insn->data_len > 0)
 			fprintf(f, " D[%d]", insn->data_len);
+
+		if (insn->initdata) {
+			fprintf(f, "=");
+			for (i=0; i<insn->data_len; i++)
+				fprintf(f, "%02X", insn->initdata[i]);
+		}
 
 		if (insn->has_opcode)
 			fprintf(f, " %02X", insn->opcode);
@@ -111,8 +119,11 @@ uint16_t prep_bindata(struct evm_insn_s *insn, uint16_t addr)
 	addr = prep_bindata(insn->left, addr);
 	assert(addr == insn->inner_addr);
 
-	for (i = 0; i < insn->data_len; i++)
-		write_bindata(addr++, 0);
+	if (insn->initdata)
+		for (i = 0; i < insn->data_len; i++)
+			write_bindata(addr++, insn->initdata[i]);
+	else
+		addr += insn->data_len;
 
 	if (insn->has_opcode)
 		write_bindata(addr++, insn->opcode);

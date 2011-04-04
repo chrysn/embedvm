@@ -48,6 +48,12 @@ static struct nametab_entry_s *add_nametab_global(char *name, int type, struct e
 static struct nametab_entry_s *find_nametab_entry(char *name);
 static struct nametab_entry_s *find_global_nametab_entry(char *name);
 
+static struct evm_insn_s *generate_pre_post_inc_dec(struct evm_insn_s *lv,
+		bool is_pre, bool is_inc, bool is_expr);
+
+static struct evm_insn_s *generate_combined_assign(struct evm_insn_s *lv,
+		struct evm_insn_s *action, bool is_pre, bool is_expr);
+
 struct func_call_args_desc_s {
 	struct evm_insn_s *insn;
 	int num;
@@ -60,6 +66,8 @@ struct func_call_args_desc_s {
 	char *string;
 	struct evm_insn_s *insn;
 	struct func_call_args_desc_s *fc;
+	struct array_init_s ainit;
+	void *vp;
 }
 
 %token <number> TOK_NUMBER TOK_USERFUNC
@@ -87,10 +95,17 @@ struct func_call_args_desc_s {
 
 %right NEG
 
-%type <insn> program meta_statement global_data function_def function_body
-%type <insn> statement_list statement core_statement lvalue expression
+%left TOK_INC TOK_DEC
 
-%type <number> function_args function_vars function_var_list;
+%token TOK_ASSIGN_ADD TOK_ASSIGN_SUB TOK_ASSIGN_MUL TOK_ASSIGN_DIV TOK_ASSIGN_MOD
+%token TOK_ASSIGN_SHL TOK_ASSIGN_SHR TOK_ASSIGN_AND TOK_ASSIGN_OR TOK_ASSIGN_XOR
+
+%type <insn> program meta_statement global_data function_def function_body
+%type <insn> statement_list statement core_statement lvalue func_expression expression
+
+%type <number> function_args function_vars function_var_list array_type combined_assign;
+%type <ainit> array_init array_init_data
+%type <vp> global_var_init
 %type <fc> func_call_args
 
 %expect 1
@@ -154,26 +169,64 @@ meta_statement:
 		$$->set_addr = $2;
 	};
 
+array_type:
+	TOK_ARRAY_8U { $$ = VARTYPE_GLOBAL_8U; } |
+	TOK_ARRAY_8S { $$ = VARTYPE_GLOBAL_8S; } |
+	TOK_ARRAY_16 { $$ = VARTYPE_GLOBAL_16; };
+
+array_init_data:
+	/* empty */ {
+		$$.len = 0;
+		$$.data = NULL;
+	} |
+	TOK_NUMBER {
+		$$.len = 1;
+		$$.data = malloc(64 * sizeof(int));
+		$$.data[0] = $1;
+	} |
+	array_init_data ',' TOK_NUMBER {
+		$$ = $1;
+		$$.len++;
+		$$.data = realloc($$.data, 64 * ($$.len/64 + 1) * sizeof(int));
+		$$.data[$$.len-1] = $3;
+	};
+
+array_init:
+	/* empty */ { $$.len = -1; $$.data = NULL; } |
+	'=' '{' array_init_data '}' { $$ = $3; };
+
+global_var_init:
+	/* empty */ { $$ = NULL; } |
+	'=' TOK_NUMBER {
+		uint8_t *p = malloc(2);
+		p[0] = $2 >> 8;
+		p[1] = $2;
+		$$ = p;
+	};
+
 global_data:
-	TOK_GLOBAL TOK_ID ';' {
+	TOK_GLOBAL TOK_ID global_var_init ';' {
 		$$ = new_insn_data(2, NULL, NULL);
 		$$->symbol = strdup($2);
+		$$->initdata = $3;
 		add_nametab_global($2, VARTYPE_GLOBAL_16, $$);
 	} |
-	TOK_ARRAY_8U TOK_ID '[' TOK_NUMBER ']' ';' {
-		$$ = new_insn_data($4, NULL, NULL);
+	array_type TOK_ID '[' TOK_NUMBER ']' array_init ';' {
+		int i, wordsize = $1 == VARTYPE_GLOBAL_16 ? 2 : 1;
+		$$ = new_insn_data(wordsize * $4, NULL, NULL);
 		$$->symbol = strdup($2);
-		add_nametab_global($2, VARTYPE_GLOBAL_8U, $$);
-	} |
-	TOK_ARRAY_8S TOK_ID '[' TOK_NUMBER ']' ';' {
-		$$ = new_insn_data($4, NULL, NULL);
-		$$->symbol = strdup($2);
-		add_nametab_global($2, VARTYPE_GLOBAL_8S, $$);
-	} |
-	TOK_ARRAY_16 TOK_ID '[' TOK_NUMBER ']' ';' {
-		$$ = new_insn_data(2 * $4, NULL, NULL);
-		$$->symbol = strdup($2);
-		add_nametab_global($2, VARTYPE_GLOBAL_16, $$);
+		if ($6.len >= 0) {
+			$$->initdata = calloc($4, wordsize);
+			for (i=0; i < $4 && i < $6.len; i++) {
+				if ($1 == VARTYPE_GLOBAL_16) {
+					$$->initdata[2*i] = $6.data[i] >> 8;
+					$$->initdata[2*i + 1] = $6.data[i];
+				} else {
+					$$->initdata[i] = $6.data[i];
+				}
+			}
+		}
+		add_nametab_global($2, $1, $$);
 	};
 
 function_head:
@@ -309,9 +362,36 @@ statement:
 		$$ = new_insn_op(0x9c, NULL, NULL);
 	};
 
+combined_assign:
+	TOK_ASSIGN_ADD { $$ = 0x80; } |
+	TOK_ASSIGN_SUB { $$ = 0x81; } |
+	TOK_ASSIGN_MUL { $$ = 0x82; } |
+	TOK_ASSIGN_DIV { $$ = 0x83; } |
+	TOK_ASSIGN_MOD { $$ = 0x84; } |
+	TOK_ASSIGN_SHL { $$ = 0x85; } |
+	TOK_ASSIGN_SHR { $$ = 0x86; } |
+	TOK_ASSIGN_AND { $$ = 0x87; } |
+	TOK_ASSIGN_OR  { $$ = 0x88; } |
+	TOK_ASSIGN_XOR { $$ = 0x89; };
+	
 core_statement:
-	expression {
+	func_expression {
 		$$ = new_insn_op(0x9d, $1, NULL);
+	} |
+	TOK_INC lvalue {
+		$$ = generate_pre_post_inc_dec($2, true, true, false);
+	} |
+	TOK_DEC lvalue {
+		$$ = generate_pre_post_inc_dec($2, true, false, false);
+	} |
+	lvalue TOK_INC {
+		$$ = generate_pre_post_inc_dec($1, false, true, false);
+	} |
+	lvalue TOK_DEC {
+		$$ = generate_pre_post_inc_dec($1, false, false, false);
+	} |
+	lvalue combined_assign expression {
+		$$ = generate_combined_assign($1, new_insn_op($2, $3, NULL), false, false);
 	} |
 	lvalue '=' expression {
 		$$ = new_insn($3, $1);
@@ -364,7 +444,37 @@ lvalue:
 		}
 	};
 
+func_expression:
+	TOK_ID '(' func_call_args ')' {
+		struct nametab_entry_s *e = find_global_nametab_entry($1);
+		if (!e || e->type != VARTYPE_FUNC) {
+			fprintf(stderr, "Unkown function `%s' in line %d!\n", $1, yyget_lineno());
+			exit(1);
+		}
+		if (e->num_args != $3->num) {
+			fprintf(stderr, "Call of function `%s' with incorrect number of arguments in line %d!\n", $1, yyget_lineno());
+			exit(1);
+		}
+		struct evm_insn_s *popargs = NULL;
+		while ($3->num > 0) {
+			int this_num = $3->num > 8 ? 8 : $3->num;
+			popargs = new_insn_op(0xf8 + (this_num-1), popargs, NULL);
+			$3->num -= this_num;
+		}
+		$$ = new_insn_op_reladdr(0xa0 + 3, e->addr, $3->insn, popargs);
+	} |
+	TOK_USERFUNC '(' func_call_args ')' {
+		$$ = new_insn_op_val(0x9a, $3->num, $3->insn, NULL);
+		$$ = new_insn_op(0xb0 + $1, $$, NULL);
+	};
+
 expression:
+	func_expression {
+		$$ = $1;
+	} |
+	'(' expression ')' {
+		$$ = $2;
+	} |
 	TOK_NUMBER {
 		$$ = new_insn_op_val(0x9a, $1, NULL, NULL);
 	} |
@@ -374,9 +484,6 @@ expression:
 	TOK_ADDR {
 		struct evm_insn_s *here = new_insn(NULL, NULL);
 		$$ = new_insn_op_absaddr(0x9a, here, here, NULL);
-	} |
-	'(' expression ')' {
-		$$ = $2;
 	} |
 	TOK_ID {
 		struct nametab_entry_s *e = find_nametab_entry($1);
@@ -422,28 +529,6 @@ expression:
 		default:
 			abort();
 		}
-	} |
-	TOK_ID '(' func_call_args ')' {
-		struct nametab_entry_s *e = find_global_nametab_entry($1);
-		if (!e || e->type != VARTYPE_FUNC) {
-			fprintf(stderr, "Unkown function `%s' in line %d!\n", $1, yyget_lineno());
-			exit(1);
-		}
-		if (e->num_args != $3->num) {
-			fprintf(stderr, "Call of function `%s' with incorrect number of arguments in line %d!\n", $1, yyget_lineno());
-			exit(1);
-		}
-		struct evm_insn_s *popargs = NULL;
-		while ($3->num > 0) {
-			int this_num = $3->num > 8 ? 8 : $3->num;
-			popargs = new_insn_op(0xf8 + (this_num-1), popargs, NULL);
-			$3->num -= this_num;
-		}
-		$$ = new_insn_op_reladdr(0xa0 + 3, e->addr, $3->insn, popargs);
-	} |
-	TOK_USERFUNC '(' func_call_args ')' {
-		$$ = new_insn_op_val(0x9a, $3->num, $3->insn, NULL);
-		$$ = new_insn_op(0xb0 + $1, $$, NULL);
 	} |
 	'+' expression %prec NEG {
 		$$ = $2;
@@ -511,6 +596,18 @@ expression:
 	expression '>' expression {
 		$$ = new_insn_op(0xa8 + 5, new_insn($1, $3), NULL);
 	} |
+	TOK_INC lvalue {
+		$$ = generate_pre_post_inc_dec($2, true, true, true);
+	} |
+	TOK_DEC lvalue {
+		$$ = generate_pre_post_inc_dec($2, true, false, true);
+	} |
+	lvalue TOK_INC {
+		$$ = generate_pre_post_inc_dec($1, false, true, true);
+	} |
+	lvalue TOK_DEC {
+		$$ = generate_pre_post_inc_dec($1, false, false, true);
+	} |
 	expression '?' expression ':' expression {
 		struct evm_insn_s *end = new_insn(NULL, NULL);
 		struct evm_insn_s *wrap_false = new_insn($5, end);
@@ -534,6 +631,63 @@ func_call_args:
 	};
 
 %%
+
+static struct evm_insn_s *generate_pre_post_inc_dec(struct evm_insn_s *lv,
+		bool is_pre, bool is_inc, bool is_expr)
+{
+	struct evm_insn_s *action = new_insn_op(0x90 + 1, NULL, NULL);
+	action = new_insn_op(is_inc ? 0x80 : 0x81 , action, NULL);
+
+	return generate_combined_assign(lv, action, is_pre, is_expr);
+}
+
+static struct evm_insn_s *generate_combined_assign(struct evm_insn_s *lv,
+		struct evm_insn_s *action, bool is_pre, bool is_expr)
+{
+	struct evm_insn_s *insn = lv;
+	bool lvalue_prep = false;
+	uint8_t store_opcode;
+
+	/* convert lvalue to load op and save store opcode */
+	store_opcode = insn->opcode;
+	if (insn->opcode >= 0xc0 && insn->opcode < 0xf0) {
+		insn->opcode -= 0x08;
+	}
+	else if (insn->opcode >= 0x40 && insn->opcode < 0x80) {
+		insn->opcode -= 0x40;
+	}
+	else
+		abort();
+
+	if (insn->left) {
+		/* inject dup */
+		insn->left = new_insn_op(0xc5, insn->left, NULL);
+		lvalue_prep = true;
+		lv->left = NULL;
+	}
+
+	/* copy old value for postfix */
+	if (is_expr && !is_pre)
+		insn = new_insn_op(0xc5 + (lvalue_prep ? 1 : 0)*8, insn, NULL);
+
+	/* perform operation */
+	insn = new_insn(insn, action);
+
+	/* copy new value for prefix */
+	if (is_expr && is_pre)
+		insn = new_insn_op(0xc5 + (lvalue_prep ? 1 : 0)*8, insn, NULL);
+
+	/* shuffle address to top if needed */
+	if (lvalue_prep)
+		insn = new_insn_op(0xc6, insn, NULL);
+
+	/* perform store operation */
+	insn = new_insn_op(store_opcode, insn, NULL);
+	insn->has_arg_data = lv->has_arg_data;
+	insn->arg_addr = lv->arg_addr;
+
+	return insn;
+}
 
 static struct nametab_entry_s *add_nametab_local(char *name, int index)
 {

@@ -32,6 +32,11 @@ enum evm_var_type {
 	VARTYPE_FUNC = 5
 };
 
+struct array_init_s {
+	int len;
+	int *data;
+};
+
 struct evm_insn_s {
 	bool has_opcode;
 	bool arg_is_relative;
@@ -41,6 +46,7 @@ struct evm_insn_s {
 	uint8_t opcode;
 	int16_t arg_val;
 	uint16_t data_len;
+	uint8_t *initdata;
 	struct evm_insn_s *arg_addr;
 	struct evm_insn_s *left, *right;
 	uint16_t addr, set_addr, inner_addr;
@@ -72,7 +78,7 @@ extern struct evm_insn_s *new_insn_op_val(uint8_t opcode, int16_t val,
 extern struct evm_insn_s *new_insn_data(uint16_t len,
 		struct evm_insn_s *left, struct evm_insn_s *right);
 
-extern void insn_dump(struct evm_insn_s *insn, char *type, int indent);
+extern void insn_dump(FILE *f, struct evm_insn_s *insn, char *type, int indent);
 
 extern uint16_t codegen_len;
 extern struct evm_insn_s *codegen_insn;

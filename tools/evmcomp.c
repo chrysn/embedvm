@@ -44,7 +44,11 @@ abort_with_help_msg:
 
 	// yydebug = 1;
 	yyparse();
-	// insn_dump(codegen_insn, "ROOT", 0);
+
+	strcpy(prefix+prefix_len-4, ".ast");
+	f = fopen(prefix, "wt");
+	insn_dump(f, codegen_insn, "ROOT", 0);
+	fclose(f);
 
 	strcpy(prefix+prefix_len-4, ".dbg");
 	f = fopen(prefix, "wt");

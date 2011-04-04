@@ -21,12 +21,12 @@
 $memaddr 0x0010
 
 global x;
-global y;
-global z;
+global y = 0x22;
+global z = 0x33;
 
 array8u array_8bit_unsigned[16];
-array8s array_8bit_signed[16];
-array16 array_16bit[16];
+array8s array_8bit_signed[16] = { };
+array16 array_16bit[16] = { 1, 2, 3, 4 };
 
 function sum3(a,b,c)
 {
@@ -72,7 +72,7 @@ function demo()
 	for (i=0; i<16; i=i+1)
 		sum = $uf6(sum, array_16bit[i]);
 
-	$uf7($uf6(-sum) + 2920);
+	$uf7($uf6(-sum) + 2914);
 
 	$uf0();
 }
