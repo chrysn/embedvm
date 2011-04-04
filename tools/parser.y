@@ -23,6 +23,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <assert.h>
 #include "evmcomp.h"
 
 void yyerror (char const *s) {
@@ -38,8 +39,6 @@ struct nametab_entry_s {
 	bool is_forward_decl;
 };
 
-struct evm_section_s *sections;
-
 struct nametab_entry_s *local_ids;
 struct nametab_entry_s *global_ids;
 
@@ -47,6 +46,17 @@ static struct nametab_entry_s *add_nametab_local(char *name, int index);
 static struct nametab_entry_s *add_nametab_global(char *name, int type, struct evm_insn_s *addr);
 static struct nametab_entry_s *find_nametab_entry(char *name);
 static struct nametab_entry_s *find_global_nametab_entry(char *name);
+
+struct loopcontext_s {
+	struct evm_insn_s *break_insn;
+	struct evm_insn_s *continue_insn;
+	struct evm_insn_s *body_insn;
+	struct loopcontext_s *next;
+};
+
+struct loopcontext_s *loopctx_stack;
+
+struct evm_section_s *sections;
 
 static struct evm_insn_s *generate_pre_post_inc_dec(struct evm_insn_s *lv,
 		bool is_pre, bool is_inc, bool is_expr);
@@ -66,6 +76,7 @@ struct func_call_args_desc_s {
 	char *string;
 	struct evm_insn_s *insn;
 	struct func_call_args_desc_s *fc;
+	struct loopcontext_s *loopctx;
 	struct array_init_s ainit;
 	void *vp;
 }
@@ -73,7 +84,8 @@ struct func_call_args_desc_s {
 %token <number> TOK_NUMBER TOK_USERFUNC
 %token <string> TOK_ID
 
-%token TOK_IF TOK_ELSE TOK_DO TOK_FOR TOK_WHILE TOK_RETURN TOK_FUNCTION
+%token TOK_IF TOK_ELSE TOK_DO TOK_FOR TOK_WHILE
+%token TOK_BREAK TOK_CONTINUE TOK_RETURN TOK_FUNCTION
 %token TOK_LOCAL TOK_GLOBAL TOK_ARRAY_8U TOK_ARRAY_8S TOK_ARRAY_16
 %token TOK_LINE TOK_ADDR TOK_EXTERN TOK_MEMADDR TOK_SECTION TOK_TRAMPOLINE
 
@@ -107,6 +119,7 @@ struct func_call_args_desc_s {
 %type <number> function_args function_vars function_var_list
 %type <number> array_type combined_assign number
 %type <ainit> array_init array_init_data
+%type <loopctx> loop_body
 %type <vp> global_var_init
 %type <fc> func_call_args
 
@@ -128,6 +141,7 @@ program:
 		sections = NULL;
 		local_ids = NULL;
 		global_ids = NULL;
+		loopctx_stack = NULL;
 	} |
 	program meta_statement {
 		$$ = new_insn($1, $2);
@@ -281,6 +295,7 @@ function_def:
 			e->num_args = $4;
 		}
 		$$->symbol = strdup($2);
+		assert(loopctx_stack == NULL);
 	};
 
 function_args:
@@ -351,27 +366,61 @@ statement:
 		struct evm_insn_s *wrap_then = new_insn_op_reladdr(0xa0 + 1, end, $5, wrap_else);
 		$$ = new_insn_op_reladdr(0xa0 + 7, wrap_else, $3, wrap_then);
 	} |
-	TOK_DO statement TOK_WHILE '(' expression ')' ';' {
-		$$ = new_insn_op_reladdr(0xa0 + 5, $2, new_insn($2, $5), NULL);
+	TOK_DO loop_body TOK_WHILE '(' expression ')' ';' {
+		struct evm_insn_s *body = new_insn($2->body_insn, $2->continue_insn);
+		$$ = new_insn_op_reladdr(0xa0 + 5, body, new_insn(body, $5), NULL);
+		$$ = new_insn($$, $2->break_insn);
 	} |
-	TOK_WHILE '(' expression ')' statement {
+	TOK_WHILE '(' expression ')' loop_body {
 		struct evm_insn_s *end = new_insn(NULL, NULL);
-		$$ = new_insn_op_reladdr(0xa0 + 7, end, $3, new_insn_op_reladdr(0xa0 + 1, $3, $5, end));
+		$$ = new_insn_op_reladdr(0xa0 + 7, end, $3,
+				new_insn_op_reladdr(0xa0 + 1, $3, $5->body_insn, end));
+		$$ = new_insn(new_insn($5->continue_insn, $$), $5->break_insn);
 	} |
-	TOK_FOR '(' maybe_core_statement ';' expression ';' maybe_core_statement ')' statement {
-		struct evm_insn_s *end = new_insn(NULL, NULL);
+	TOK_FOR '(' maybe_core_statement ';' expression ';' maybe_core_statement ')' loop_body {
+		struct evm_insn_s *end = $9->break_insn;
 		struct evm_insn_s *loop = new_insn_op_reladdr(0xa0 + 7, end, $5,
-				new_insn_op_reladdr(0xa0 + 1, $5, new_insn($9, $7), end));
-		$$ = new_insn($3, loop);
+				new_insn_op_reladdr(0xa0 + 1, $5,
+				new_insn($9->body_insn, $7), end));
+		$$ = new_insn($3, new_insn($9->continue_insn, loop));
 	} |
-	TOK_FOR '(' maybe_core_statement ';' ';' maybe_core_statement ')' statement {
-		$$ = new_insn($3, new_insn_op_reladdr(0xa0 + 1, $8, new_insn($8, $6), NULL));
+	TOK_FOR '(' maybe_core_statement ';' ';' maybe_core_statement ')' loop_body {
+		$$ = new_insn($3, new_insn_op_reladdr(0xa0 + 1, $8->body_insn,
+				new_insn($8->body_insn, $6), NULL));
+		$$ = new_insn(new_insn($8->continue_insn, $$), $8->break_insn);
+	} |
+	TOK_BREAK ';' {
+		if (!loopctx_stack) {
+			fprintf(stderr, "Fond break outside loop in line %d!\n", yyget_lineno());
+			exit(1);
+		}
+		$$ = new_insn_op_reladdr(0xa0 + 1, loopctx_stack->break_insn, NULL, NULL);
+	} |
+	TOK_CONTINUE ';' {
+		if (!loopctx_stack) {
+			fprintf(stderr, "Fond continue outside loop in line %d!\n", yyget_lineno());
+			exit(1);
+		}
+		$$ = new_insn_op_reladdr(0xa0 + 1, loopctx_stack->continue_insn, NULL, NULL);
 	} |
 	TOK_RETURN expression ';' {
 		$$ = new_insn_op(0x9b, $2, NULL);
 	} |
 	TOK_RETURN ';' {
 		$$ = new_insn_op(0x9c, NULL, NULL);
+	};
+
+loop_body: {
+		struct loopcontext_s *ctx = malloc(sizeof(struct loopcontext_s));
+		ctx->break_insn = new_insn(NULL, NULL);
+		ctx->continue_insn = new_insn(NULL, NULL);
+		ctx->next = loopctx_stack;
+		loopctx_stack = ctx;
+	} statement {
+		$$ = loopctx_stack;
+		loopctx_stack = loopctx_stack->next;
+		$$->body_insn = $2;
+		$$->next = NULL;
 	};
 
 combined_assign:

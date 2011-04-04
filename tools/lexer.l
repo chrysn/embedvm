@@ -35,6 +35,8 @@
 "do"		return TOK_DO;
 "for"		return TOK_FOR;
 "while"		return TOK_WHILE;
+"break"		return TOK_BREAK;
+"continue"	return TOK_CONTINUE;
 "return"	return TOK_RETURN;
 "function"	return TOK_FUNCTION;
 

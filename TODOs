@@ -1,5 +1,5 @@
 * Add documentation for high-level language
-* Add compiler support for break, continue and goto
+* Add compiler support for good old goto statements
 * Add support for '&' prefix operator for creating pointers
 * Add statements for pointer access ($ptr8u, $ptr8s, $ptr16, $ptrf)
 * Compiler check: Use arrays with [] or & only, dont use [] on variables

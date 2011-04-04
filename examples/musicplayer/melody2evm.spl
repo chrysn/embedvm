@@ -94,7 +94,7 @@ write(<:>
 	:	for (i=0;; i++) {
 	:		tone = melody_data[i];
 	:		if (tone == 0xff)
-	:			return;
+	:			break;
 	:		timeidx = melody_data[i] & 31;
 	:		// $$uf0(i, tone, timeidx);
 	:		$$uf1(melody_freq[tone >> 5]);
