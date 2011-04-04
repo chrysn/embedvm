@@ -86,3 +86,19 @@ write("255};\n");
 // write("min_tone = $min_tone, max_tone = $max_tone, min_on = $min_on, max_on = $max_on, "
 // 		"min_off = $min_off, max_off = $max_off\n");
 
+write(<:>
+	: function main()
+	: {
+	:	local i;
+	:	for (i=0; melody_data[i] != 0xff; i++) {
+	:		$$uf0(i, melody_data[i], melody_data[i] >> 5, melody_data[i] & 31,
+	:				melody_timing_on[melody_data[i] & 31],
+	:				melody_timing_off[melody_data[i] & 31]);
+	:		$$uf1(melody_freq[melody_data[i] >> 5]);
+	:		$$uf2(10 * melody_timing_on[melody_data[i] & 31]);
+	:		$$uf1(0);
+	:		$$uf2(10 * melody_timing_off[melody_data[i] & 31]);
+	:	}
+	: }
+</>);
+
