@@ -17,7 +17,8 @@ the reasonable amount of memory the EmbedVM functions need on the stack there
 are no additional memory requirements for the VM. Especially the VM does not
 depend on any dymaic memory management.
 
-EmbedVM is optimized for size and simplicity, not execution speed.
+EmbedVM is optimized for size and simplicity, not execution speed. The VM
+itself takes up about 3kB of program memory on an AVR microcontroller.
 
 All memory accesses done by the VM are parformed using user callback functions.
 So it is possible to have some or all of the VM memory on external memory

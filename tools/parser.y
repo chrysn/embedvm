@@ -102,7 +102,7 @@ struct func_call_args_desc_s {
 
 %type <insn> program meta_statement global_data function_def function_body
 %type <insn> statement_list statement core_statement lvalue func_expression
-%type <insn> expression
+%type <insn> maybe_core_statement expression
 
 %type <number> function_args function_vars function_var_list
 %type <number> array_type combined_assign number
@@ -117,7 +117,9 @@ struct func_call_args_desc_s {
 
 input:
 	program {
-		codegen($1);
+		struct evm_insn_s *end = new_insn(NULL, NULL);
+		end->symbol = strdup("_end");
+		codegen(new_insn($1, end));
 	};
 
 program:
@@ -356,11 +358,14 @@ statement:
 		struct evm_insn_s *end = new_insn(NULL, NULL);
 		$$ = new_insn_op_reladdr(0xa0 + 7, end, $3, new_insn_op_reladdr(0xa0 + 1, $3, $5, end));
 	} |
-	TOK_FOR '(' core_statement ';' expression ';' core_statement ')' statement {
+	TOK_FOR '(' maybe_core_statement ';' expression ';' maybe_core_statement ')' statement {
 		struct evm_insn_s *end = new_insn(NULL, NULL);
 		struct evm_insn_s *loop = new_insn_op_reladdr(0xa0 + 7, end, $5,
 				new_insn_op_reladdr(0xa0 + 1, $5, new_insn($9, $7), end));
 		$$ = new_insn($3, loop);
+	} |
+	TOK_FOR '(' maybe_core_statement ';' ';' maybe_core_statement ')' statement {
+		$$ = new_insn($3, new_insn_op_reladdr(0xa0 + 1, $8, new_insn($8, $6), NULL));
 	} |
 	TOK_RETURN expression ';' {
 		$$ = new_insn_op(0x9b, $2, NULL);
@@ -403,6 +408,10 @@ core_statement:
 	lvalue '=' expression {
 		$$ = new_insn($3, $1);
 	};
+
+maybe_core_statement:
+	/* empty */ { $$ = NULL; } |
+	core_statement { $$ = $1; };
 
 lvalue:
 	TOK_ID {

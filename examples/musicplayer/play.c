@@ -11,7 +11,7 @@
 
 FILE *aplay_pipe = NULL;
 
-uint8_t vm_mem[512] = { EMBEDVM_SECT_SRAM_DATA };
+uint8_t vm_mem[256] = { EMBEDVM_SECT_SRAM_DATA };
 struct embedvm_s vm;
 
 int t, f;

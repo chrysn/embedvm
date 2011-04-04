@@ -90,16 +90,17 @@ write("255};\n");
 write(<:>
 	: function main()
 	: {
-	:	local i;
-	:	for (i=0; melody_data[i] != 0xff; i++) {
-	:		$$uf0(i, melody_data[i], melody_data[i] >> 5, melody_data[i] & 31,
-	:				melody_freq[melody_data[i] >> 5],
-	:				melody_timing_on[melody_data[i] & 31],
-	:				melody_timing_off[melody_data[i] & 31]);
-	:		$$uf1(melody_freq[melody_data[i] >> 5]);
-	:		$$uf2($timescale * melody_timing_on[melody_data[i] & 31]);
+	:	local i, tone, timeidx;
+	:	for (i=0;; i++) {
+	:		tone = melody_data[i];
+	:		if (tone == 0xff)
+	:			return;
+	:		timeidx = melody_data[i] & 31;
+	:		// $$uf0(i, tone, timeidx);
+	:		$$uf1(melody_freq[tone >> 5]);
+	:		$$uf2($timescale * melody_timing_on[timeidx]);
 	:		$$uf1(0);
-	:		$$uf2($timescale * melody_timing_off[melody_data[i] & 31]);
+	:		$$uf2($timescale * melody_timing_off[timeidx]);
 	:	}
 	: }
 </>);
