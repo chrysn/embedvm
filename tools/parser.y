@@ -123,6 +123,7 @@ struct func_call_args_desc_s {
 
 %type <number> function_args function_vars function_var_list
 %type <number> array_type ptr_type combined_assign number
+%type <number> maybe_extern function_head
 %type <ainit> array_init array_init_data
 %type <loopctx> loop_body
 %type <vp> global_var_init
@@ -241,43 +242,71 @@ global_var_init:
 		$$ = p;
 	};
 
+maybe_extern:
+	/* empty */ { $$ = -1; } |
+	TOK_EXTERN TOK_NUMBER { $$ = $2; };
+
 global_data:
-	TOK_GLOBAL TOK_ID global_var_init ';' {
+	maybe_extern TOK_GLOBAL TOK_ID global_var_init ';' {
 		$$ = new_insn_data(2, NULL, NULL);
-		$$->symbol = strdup($2);
-		$$->initdata = $3;
-		add_nametab_global($2, VARTYPE_GLOBAL, $$);
+		$$->symbol = strdup($3);
+		$$->initdata = $4;
+		add_nametab_global($3, VARTYPE_GLOBAL, $$);
+		if ($1 >= 0) {
+			if ($4 != NULL) {
+				fprintf(stderr, "Error in line %d: Extern declaration of `%s' with initializer!\n", yyget_lineno(), $3);
+				exit(1);
+			}
+			$$->addr = $1;
+			$$ = NULL;
+		}
 	} |
-	array_type TOK_ID '[' TOK_NUMBER ']' array_init ';' {
-		int i, wordsize = $1 == VARTYPE_ARRAY_16 ? 2 : 1;
-		$$ = new_insn_data(wordsize * $4, NULL, NULL);
-		$$->symbol = strdup($2);
-		if ($6.len >= 0) {
-			$$->initdata = calloc($4, wordsize);
-			for (i=0; i < $4 && i < $6.len; i++) {
-				if ($1 == VARTYPE_ARRAY_16) {
-					$$->initdata[2*i] = $6.data[i] >> 8;
-					$$->initdata[2*i + 1] = $6.data[i];
+	maybe_extern array_type TOK_ID '[' TOK_NUMBER ']' array_init ';' {
+		int i, wordsize = $2 == VARTYPE_ARRAY_16 ? 2 : 1;
+		$$ = new_insn_data(wordsize * $5, NULL, NULL);
+		$$->symbol = strdup($3);
+		if ($7.len >= 0) {
+			$$->initdata = calloc($5, wordsize);
+			for (i=0; i < $5 && i < $7.len; i++) {
+				if ($2 == VARTYPE_ARRAY_16) {
+					$$->initdata[2*i] = $7.data[i] >> 8;
+					$$->initdata[2*i + 1] = $7.data[i];
 				} else {
-					$$->initdata[i] = $6.data[i];
+					$$->initdata[i] = $7.data[i];
 				}
 			}
 		}
-		add_nametab_global($2, $1, $$);
+		add_nametab_global($3, $2, $$);
+		if ($1 >= 0) {
+			if ($7.len >= 0) {
+				fprintf(stderr, "Error in line %d: Extern declaration of `%s' with initializer!\n", yyget_lineno(), $3);
+				exit(1);
+			}
+			$$->addr = $1;
+			$$ = NULL;
+		}
 	};
 
 function_head:
-	TOK_FUNCTION { goto_ids=NULL; local_ids=NULL; };
+	maybe_extern TOK_FUNCTION { goto_ids=NULL; local_ids=NULL; $$ = $1; };
 
 function_def:
 	function_head TOK_ID '(' function_args ')' ';' {
 		struct nametab_entry_s *e = add_nametab_global($2, VARTYPE_FUNC, $$);
 		e->num_args = $4;
 		e->addr = new_insn(NULL, NULL);
-		e->is_forward_decl = true;
+		if ($1 >= 0)
+			e->addr->addr = $1;
+		else {
+			e->is_forward_decl = true;
+		}
 		$$ = NULL;
 	} |
 	function_head TOK_ID '(' function_args ')' '{' function_vars function_body '}' {
+		if ($1 >= 0) {
+			fprintf(stderr, "Error in line %d: Extern declaration of `%s' with implementation!\n", yyget_lineno(), $2);
+			exit(1);
+		}
 		int local_vars = $7;
 		struct evm_insn_s *alloc_local = NULL;
 		while (local_vars > 0) {

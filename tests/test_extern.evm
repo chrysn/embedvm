@@ -1,0 +1,28 @@
+
+$extern 0x0100
+global gvar;
+
+$extern 0x0200
+array16 ga16[5];
+
+$extern 0x0300
+function extfunct(a, b, c);
+
+function main()
+{
+	$uf1(ga16[0], ga16[1], ga16[2], ga16[3], ga16[4], gvar);
+	extfunct(1000, 2000, 3000);
+}
+
+$memaddr 0x0100
+global direct_gvar = 100;
+
+$memaddr 0x0200
+array16 direct_ga16[5] = { 1, 2, 3, 4, 5 };
+
+$memaddr 0x0300
+function direct_extfunct(a, b, c)
+{
+	$uf2(a, b, c);
+}
+
