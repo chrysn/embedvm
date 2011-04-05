@@ -1,6 +1,5 @@
 * Add documentation for high-level language
 * Add support for '&' prefix operator for creating pointers
 * Add statements for pointer access ($ptr8u, $ptr8s, $ptr16, $ptrf)
-* Compiler check: Use arrays with [] or & only, dont use [] on variables
 * Implement $extern keyword in compiler
 * Add simple testcases for all features

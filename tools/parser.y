@@ -200,9 +200,9 @@ meta_statement:
 	};
 
 array_type:
-	TOK_ARRAY_8U { $$ = VARTYPE_GLOBAL_8U; } |
-	TOK_ARRAY_8S { $$ = VARTYPE_GLOBAL_8S; } |
-	TOK_ARRAY_16 { $$ = VARTYPE_GLOBAL_16; };
+	TOK_ARRAY_8U { $$ = VARTYPE_ARRAY_8U; } |
+	TOK_ARRAY_8S { $$ = VARTYPE_ARRAY_8S; } |
+	TOK_ARRAY_16 { $$ = VARTYPE_ARRAY_16; };
 
 number:
 	TOK_NUMBER { $$ = $1; } |
@@ -244,16 +244,16 @@ global_data:
 		$$ = new_insn_data(2, NULL, NULL);
 		$$->symbol = strdup($2);
 		$$->initdata = $3;
-		add_nametab_global($2, VARTYPE_GLOBAL_16, $$);
+		add_nametab_global($2, VARTYPE_GLOBAL, $$);
 	} |
 	array_type TOK_ID '[' TOK_NUMBER ']' array_init ';' {
-		int i, wordsize = $1 == VARTYPE_GLOBAL_16 ? 2 : 1;
+		int i, wordsize = $1 == VARTYPE_ARRAY_16 ? 2 : 1;
 		$$ = new_insn_data(wordsize * $4, NULL, NULL);
 		$$->symbol = strdup($2);
 		if ($6.len >= 0) {
 			$$->initdata = calloc($4, wordsize);
 			for (i=0; i < $4 && i < $6.len; i++) {
-				if ($1 == VARTYPE_GLOBAL_16) {
+				if ($1 == VARTYPE_ARRAY_16) {
 					$$->initdata[2*i] = $6.data[i] >> 8;
 					$$->initdata[2*i + 1] = $6.data[i];
 				} else {
@@ -508,17 +508,12 @@ lvalue:
 		case VARTYPE_LOCAL:
 			$$ = new_insn_op(0x40 + (e->index & 0x3f), NULL, NULL);
 			break;
-		case VARTYPE_GLOBAL_8U:
-			$$ = new_insn_op_absaddr(0xc8 + 1, e->addr, NULL, NULL);
-			break;
-		case VARTYPE_GLOBAL_8S:
-			$$ = new_insn_op_absaddr(0xd8 + 1, e->addr, NULL, NULL);
-			break;
-		case VARTYPE_GLOBAL_16:
+		case VARTYPE_GLOBAL:
 			$$ = new_insn_op_absaddr(0xe8 + 1, e->addr, NULL, NULL);
 			break;
 		default:
-			abort();
+			fprintf(stderr, "Identifier `%s' used incorrectly in line %d!\n", $1, yyget_lineno());
+			exit(1);
 		}
 	} |
 	TOK_ID '[' expression ']' {
@@ -529,17 +524,18 @@ lvalue:
 		}
 		switch (e->type)
 		{
-		case VARTYPE_GLOBAL_8U:
+		case VARTYPE_ARRAY_8U:
 			$$ = new_insn_op_absaddr(0xc8 + 4, e->addr, $3, NULL);
 			break;
-		case VARTYPE_GLOBAL_8S:
+		case VARTYPE_ARRAY_8S:
 			$$ = new_insn_op_absaddr(0xd8 + 4, e->addr, $3, NULL);
 			break;
-		case VARTYPE_GLOBAL_16:
+		case VARTYPE_ARRAY_16:
 			$$ = new_insn_op_absaddr(0xe8 + 4, e->addr, $3, NULL);
 			break;
 		default:
-			abort();
+			fprintf(stderr, "Identifier `%s' used incorrectly in line %d!\n", $1, yyget_lineno());
+			exit(1);
 		}
 	};
 
@@ -595,17 +591,12 @@ expression:
 		case VARTYPE_LOCAL:
 			$$ = new_insn_op(0x00 + (e->index & 0x3f), NULL, NULL);
 			break;
-		case VARTYPE_GLOBAL_8U:
-			$$ = new_insn_op_absaddr(0xc0 + 1, e->addr, NULL, NULL);
-			break;
-		case VARTYPE_GLOBAL_8S:
-			$$ = new_insn_op_absaddr(0xd0 + 1, e->addr, NULL, NULL);
-			break;
-		case VARTYPE_GLOBAL_16:
+		case VARTYPE_GLOBAL:
 			$$ = new_insn_op_absaddr(0xe0 + 1, e->addr, NULL, NULL);
 			break;
 		default:
-			abort();
+			fprintf(stderr, "Identifier `%s' used incorrectly in line %d!\n", $1, yyget_lineno());
+			exit(1);
 		}
 	} |
 	TOK_ID '[' expression ']' {
@@ -616,17 +607,18 @@ expression:
 		}
 		switch (e->type)
 		{
-		case VARTYPE_GLOBAL_8U:
+		case VARTYPE_ARRAY_8U:
 			$$ = new_insn_op_absaddr(0xc0 + 4, e->addr, $3, NULL);
 			break;
-		case VARTYPE_GLOBAL_8S:
+		case VARTYPE_ARRAY_8S:
 			$$ = new_insn_op_absaddr(0xd0 + 4, e->addr, $3, NULL);
 			break;
-		case VARTYPE_GLOBAL_16:
+		case VARTYPE_ARRAY_16:
 			$$ = new_insn_op_absaddr(0xe0 + 4, e->addr, $3, NULL);
 			break;
 		default:
-			abort();
+			fprintf(stderr, "Identifier `%s' used incorrectly in line %d!\n", $1, yyget_lineno());
+			exit(1);
 		}
 	} |
 	'+' expression %prec NEG {
