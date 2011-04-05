@@ -37,6 +37,7 @@
 "while"		return TOK_WHILE;
 "break"		return TOK_BREAK;
 "continue"	return TOK_CONTINUE;
+"goto"		return TOK_GOTO;
 "return"	return TOK_RETURN;
 "function"	return TOK_FUNCTION;
 
@@ -80,6 +81,9 @@
 "&="		return TOK_ASSIGN_AND;
 "|="		return TOK_ASSIGN_OR;
 "^="		return TOK_ASSIGN_XOR;
+
+"true"			{ yylval.number = 1; return TOK_NUMBER; }
+"false"			{ yylval.number = 0; return TOK_NUMBER; }
 
 [1-9][0-9]*		{ yylval.number = atoi(yytext); return TOK_NUMBER; }
 "0"[0-7]*		{ yylval.number = strtol(yytext+1, NULL, 8); return TOK_NUMBER; }

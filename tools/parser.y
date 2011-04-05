@@ -39,11 +39,14 @@ struct nametab_entry_s {
 	bool is_forward_decl;
 };
 
+struct nametab_entry_s *goto_ids;
 struct nametab_entry_s *local_ids;
 struct nametab_entry_s *global_ids;
 
+static struct nametab_entry_s *add_nametab_goto(char *name);
 static struct nametab_entry_s *add_nametab_local(char *name, int index);
 static struct nametab_entry_s *add_nametab_global(char *name, int type, struct evm_insn_s *addr);
+static struct nametab_entry_s *find_nametab_goto(char *name);
 static struct nametab_entry_s *find_nametab_entry(char *name);
 static struct nametab_entry_s *find_global_nametab_entry(char *name);
 
@@ -85,7 +88,7 @@ struct func_call_args_desc_s {
 %token <string> TOK_ID
 
 %token TOK_IF TOK_ELSE TOK_DO TOK_FOR TOK_WHILE
-%token TOK_BREAK TOK_CONTINUE TOK_RETURN TOK_FUNCTION
+%token TOK_BREAK TOK_CONTINUE TOK_GOTO TOK_RETURN TOK_FUNCTION
 %token TOK_LOCAL TOK_GLOBAL TOK_ARRAY_8U TOK_ARRAY_8S TOK_ARRAY_16
 %token TOK_LINE TOK_ADDR TOK_EXTERN TOK_MEMADDR TOK_SECTION TOK_TRAMPOLINE
 
@@ -130,6 +133,14 @@ struct func_call_args_desc_s {
 
 input:
 	program {
+		struct nametab_entry_s *e;
+		for (e = global_ids; e != NULL; e = e->next) {
+			if (e->is_forward_decl) {
+				fprintf(stderr, "Got forward declaration but no implementation for function `%s'!\n", e->name);
+				exit(1);
+			}
+		}
+
 		struct evm_insn_s *end = new_insn(NULL, NULL);
 		end->symbol = strdup("_end");
 		codegen(new_insn($1, end));
@@ -139,6 +150,7 @@ program:
 	/* empty */ {
 		$$ = NULL;
 		sections = NULL;
+		goto_ids = NULL;
 		local_ids = NULL;
 		global_ids = NULL;
 		loopctx_stack = NULL;
@@ -253,7 +265,7 @@ global_data:
 	};
 
 function_head:
-	TOK_FUNCTION { local_ids=NULL; };
+	TOK_FUNCTION { goto_ids=NULL; local_ids=NULL; };
 
 function_def:
 	function_head TOK_ID '(' function_args ')' ';' {
@@ -295,6 +307,12 @@ function_def:
 			e->num_args = $4;
 		}
 		$$->symbol = strdup($2);
+		for (e = goto_ids; e != NULL; e = e->next) {
+			if (e->is_forward_decl) {
+				fprintf(stderr, "Error in line %d: Goto label `%s' used but not declared!\n", yyget_lineno(), e->name);
+				exit(1);
+			}
+		}
 		assert(loopctx_stack == NULL);
 	};
 
@@ -350,6 +368,22 @@ statement_list:
 	};
 
 statement:
+	TOK_ID ':' statement {
+		struct nametab_entry_s *e = find_nametab_goto($1);
+		if (e && e->is_forward_decl)
+			e->is_forward_decl = false;
+		else
+			e = add_nametab_goto($1);
+		$$ = new_insn(e->addr, $3);
+	} |
+	TOK_GOTO TOK_ID ';' {
+		struct nametab_entry_s *e = find_nametab_goto($2);
+		if (!e) {
+			e = add_nametab_goto($2);
+			e->is_forward_decl = true;
+		}
+		$$ = new_insn_op_reladdr(0xa0 + 1, e->addr, NULL, NULL);
+	} |
 	core_statement ';' {
 		$$ = $1;
 	} |
@@ -765,6 +799,21 @@ static struct evm_insn_s *generate_combined_assign(struct evm_insn_s *lv,
 	return insn;
 }
 
+static struct nametab_entry_s *add_nametab_goto(char *name)
+{
+	struct nametab_entry_s *e = find_nametab_goto(name);
+	if (e) {
+		fprintf(stderr, "Error in line %d: Re-declaration of goto label `%s'\n", yyget_lineno(), name);
+		exit(1);
+	}
+	e = calloc(1, sizeof(struct nametab_entry_s));
+	e->name = name;
+	e->addr = new_insn(NULL, NULL);
+	e->next = goto_ids;
+	goto_ids = e;
+	return e;
+}
+
 static struct nametab_entry_s *add_nametab_local(char *name, int index)
 {
 	struct nametab_entry_s *e = find_nametab_entry(name);
@@ -797,23 +846,30 @@ static struct nametab_entry_s *add_nametab_global(char *name, int type, struct e
 	return e;
 }
 
-struct nametab_entry_s *find_nametab_entry(char *name)
+struct nametab_entry_s *find_nametab_backend(struct nametab_entry_s *tab, char *name)
 {
-	struct nametab_entry_s *tab;
-	for (tab = local_ids; tab != NULL; tab = tab->next) {
-		if (!strcmp(tab->name, name))
-			return tab;
-	}
-	return find_global_nametab_entry(name);
-}
-
-struct nametab_entry_s *find_global_nametab_entry(char *name)
-{
-	struct nametab_entry_s *tab;
-	for (tab = global_ids; tab != NULL; tab = tab->next) {
+	for (; tab != NULL; tab = tab->next) {
 		if (!strcmp(tab->name, name))
 			return tab;
 	}
 	return NULL;
+}
+
+struct nametab_entry_s *find_nametab_goto(char *name)
+{
+	return find_nametab_backend(goto_ids, name);
+}
+
+struct nametab_entry_s *find_nametab_entry(char *name)
+{
+	struct nametab_entry_s *tab = find_nametab_backend(local_ids, name);
+	if (!tab)
+		tab = find_nametab_backend(global_ids, name);
+	return tab;
+}
+
+struct nametab_entry_s *find_global_nametab_entry(char *name)
+{
+	return find_nametab_backend(global_ids, name);
 }
 

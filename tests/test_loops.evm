@@ -35,5 +35,15 @@ function main()
 			continue;
 		$uf6(i+k);
 	}
+
+	for (i=0; i<5; i++) {
+		if (i % 2 != 0)
+			goto number_is_odd;
+		$uf7(false, i);
+		if (0) {
+number_is_odd:
+			$uf7(true, i);
+		}
+	}
 }
 
