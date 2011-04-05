@@ -23,6 +23,10 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#ifdef  __cplusplus
+extern "C" {
+#endif
+
 struct embedvm_s
 {
 	uint16_t ip, sp, sfp;
@@ -41,5 +45,9 @@ void embedvm_push(struct embedvm_s *vm, int16_t value);
 
 int16_t embedvm_local_read(struct embedvm_s *vm, int8_t sfa);
 void embedvm_local_write(struct embedvm_s *vm, int8_t sfa, int16_t value);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif
