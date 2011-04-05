@@ -18,7 +18,9 @@ are no additional memory requirements for the VM. Especially the VM does not
 depend on any dymaic memory management.
 
 EmbedVM is optimized for size and simplicity, not execution speed. The VM
-itself takes up about 3kB of program memory on an AVR microcontroller.
+itself takes up about 3kB of program memory on an AVR microcontroller. On an
+AVR ATmega168 running at 16MHz the VM can execute about 75 VM instructions
+per millisecond.
 
 All memory accesses done by the VM are parformed using user callback functions.
 So it is possible to have some or all of the VM memory on external memory
