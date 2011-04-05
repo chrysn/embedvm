@@ -10,8 +10,7 @@ struct embedvm_s vm = { };
 uint8_t vm_mem[256] = { EMBEDVM_SECT_SRAM_DATA };
 
 struct tone_s {
-	uint16_t freq;
-	uint8_t on, off;
+	uint16_t freq, on, off;
 };
 
 struct tone_s tone_buf[4];
@@ -104,18 +103,6 @@ void setup()
 				break;
 		} else {
 			uint16_t time_delta = millis() - last_time;
-			// Serial.print(tone_buf_out, DEC);
-			// Serial.print(" ");
-			// Serial.print(tone_buf_fill, DEC);
-			// Serial.print(" ");
-			// Serial.print(time_delta, DEC);
-			// Serial.print(" ");
-			// Serial.print(tone_buf[tone_buf_out].freq, DEC);
-			// Serial.print(" ");
-			// Serial.print(tone_buf[tone_buf_out].on, DEC);
-			// Serial.print(" ");
-			// Serial.print(tone_buf[tone_buf_out].off, DEC);
-			// Serial.println("");
 			if (time_delta <  tone_buf[tone_buf_out].on) {
 				buzzer(tone_buf[tone_buf_out].freq);
 			}
@@ -123,8 +110,7 @@ void setup()
 				buzzer(0);
 			}
 			else {
-				// last_time += time_delta;
-				last_time = millis();
+				last_time += time_delta;
 				tone_buf_out = (tone_buf_out + 1) % 4;
 				tone_buf_fill--;
 			}
