@@ -48,8 +48,16 @@
 "array8s"	return TOK_ARRAY_8S;
 "array16"	return TOK_ARRAY_16;
 
+"$ptr8u"	return TOK_PTR_8U;
+"$ptr8s"	return TOK_PTR_8S;
+"$ptr16"	return TOK_PTR_16;
+"$ptrf"		return TOK_PTR_F;
+
 "$line"		return TOK_LINE;
-"$addr"		return TOK_ADDR;
+"$vmip"		return TOK_VMIP;
+"$vmsp"		return TOK_VMSP;
+"$vmsfp"	return TOK_VMSFP;
+
 "$extern"	return TOK_EXTERN;
 "$memaddr"	return TOK_MEMADDR;
 "$section"	return TOK_SECTION;

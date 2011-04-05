@@ -30,7 +30,7 @@ enum evm_var_type {
 	VARTYPE_ARRAY_8U = 3,
 	VARTYPE_ARRAY_8S = 4,
 	VARTYPE_ARRAY_16 = 5,
-	VARTYPE_FUNC = 5
+	VARTYPE_FUNC = 6
 };
 
 struct array_init_s {

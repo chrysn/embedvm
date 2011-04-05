@@ -1,0 +1,4 @@
+Called user function 1 with 10 args: 0 0 0 0 0 0 0 0 0 0
+Called user function 1 with 10 args: 8 66 8 99 66 -8 99 66 1616 99
+Called user function 1 with 10 args: 5 66 8 99 66 -8 99 66 -616 99
+Main function returned => Terminating.

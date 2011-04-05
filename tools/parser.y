@@ -90,7 +90,9 @@ struct func_call_args_desc_s {
 %token TOK_IF TOK_ELSE TOK_DO TOK_FOR TOK_WHILE
 %token TOK_BREAK TOK_CONTINUE TOK_GOTO TOK_RETURN TOK_FUNCTION
 %token TOK_LOCAL TOK_GLOBAL TOK_ARRAY_8U TOK_ARRAY_8S TOK_ARRAY_16
-%token TOK_LINE TOK_ADDR TOK_EXTERN TOK_MEMADDR TOK_SECTION TOK_TRAMPOLINE
+%token TOK_EXTERN TOK_MEMADDR TOK_SECTION TOK_TRAMPOLINE
+%token TOK_LINE TOK_VMIP TOK_VMSP TOK_VMSFP
+%token TOK_PTR_8U TOK_PTR_8S TOK_PTR_16 TOK_PTR_F
 
 %left TOK_LOR
 %left TOK_LAND
@@ -117,10 +119,10 @@ struct func_call_args_desc_s {
 
 %type <insn> program meta_statement global_data function_def function_body
 %type <insn> statement_list statement core_statement lvalue func_expression
-%type <insn> maybe_core_statement expression
+%type <insn> maybe_core_statement expression ptr_index
 
 %type <number> function_args function_vars function_var_list
-%type <number> array_type combined_assign number
+%type <number> array_type ptr_type combined_assign number
 %type <ainit> array_init array_init_data
 %type <loopctx> loop_body
 %type <vp> global_var_init
@@ -496,6 +498,16 @@ maybe_core_statement:
 	/* empty */ { $$ = NULL; } |
 	core_statement { $$ = $1; };
 
+ptr_type:
+	/* TOK_PTR_F  { $$ = VARTYPE_FUNC; } | */
+	TOK_PTR_8U { $$ = VARTYPE_ARRAY_8U; } |
+	TOK_PTR_8S { $$ = VARTYPE_ARRAY_8S; } |
+	TOK_PTR_16 { $$ = VARTYPE_ARRAY_16; };
+
+ptr_index:
+	/* empty */ { $$ = NULL; } |
+	',' expression { $$ = $2; };
+
 lvalue:
 	TOK_ID {
 		struct nametab_entry_s *e = find_nametab_entry($1);
@@ -537,6 +549,32 @@ lvalue:
 			fprintf(stderr, "Identifier `%s' used incorrectly in line %d!\n", $1, yyget_lineno());
 			exit(1);
 		}
+	} |
+	ptr_type '[' expression ptr_index ']' {
+		$$ = $3;
+		if ($4) {
+			$$ = new_insn($$, $4);
+			if ($1 == VARTYPE_ARRAY_16) {
+				$$ = new_insn_op(0x90 + 1, $$, NULL);
+				$$ = new_insn_op(0x80 + 5, $$, NULL);
+			}
+			$$ = new_insn_op(0x80, $$, NULL);
+		}
+		switch ($1)
+		{
+		case VARTYPE_ARRAY_8U:
+			$$ = new_insn_op(0xc8 + 2, $$, NULL);
+			break;
+		case VARTYPE_ARRAY_8S:
+			$$ = new_insn_op(0xd8 + 2, $$, NULL);
+			break;
+		case VARTYPE_ARRAY_16:
+			$$ = new_insn_op(0xe8 + 2, $$, NULL);
+			break;
+		default:
+			fprintf(stderr, "Pointer used incorrectly in line %d!\n", yyget_lineno());
+			exit(1);
+		}
 	};
 
 func_expression:
@@ -561,6 +599,15 @@ func_expression:
 	TOK_USERFUNC '(' func_call_args ')' {
 		$$ = new_insn_op_val(0x9a, $3->num, $3->insn, NULL);
 		$$ = new_insn_op(0xb0 + $1, $$, NULL);
+	} |
+	TOK_PTR_F '[' expression ']' '(' func_call_args ')' {
+		struct evm_insn_s *popargs = NULL;
+		while ($6->num > 0) {
+			int this_num = $6->num > 8 ? 8 : $6->num;
+			popargs = new_insn_op(0xf8 + (this_num-1), popargs, NULL);
+			$6->num -= this_num;
+		}
+		$$ = new_insn_op(0x9e, new_insn($6->insn, $3), popargs);
 	};
 
 expression:
@@ -576,48 +623,51 @@ expression:
 	TOK_LINE {
 		$$ = new_insn_op_val(0x9a, yyget_lineno(), NULL, NULL);
 	} |
-	TOK_ADDR {
+	TOK_VMIP {
 		struct evm_insn_s *here = new_insn(NULL, NULL);
 		$$ = new_insn_op_absaddr(0x9a, here, here, NULL);
 	} |
-	TOK_ID {
-		struct nametab_entry_s *e = find_nametab_entry($1);
-		if (!e) {
-			fprintf(stderr, "Unkown identifier `%s' in line %d!\n", $1, yyget_lineno());
-			exit(1);
-		}
-		switch (e->type)
-		{
-		case VARTYPE_LOCAL:
-			$$ = new_insn_op(0x00 + (e->index & 0x3f), NULL, NULL);
-			break;
-		case VARTYPE_GLOBAL:
-			$$ = new_insn_op_absaddr(0xe0 + 1, e->addr, NULL, NULL);
-			break;
-		default:
-			fprintf(stderr, "Identifier `%s' used incorrectly in line %d!\n", $1, yyget_lineno());
-			exit(1);
-		}
+	TOK_VMSP {
+		$$ = new_insn_op(0xae, NULL, NULL);
 	} |
-	TOK_ID '[' expression ']' {
-		struct nametab_entry_s *e = find_global_nametab_entry($1);
+	TOK_VMSFP {
+		$$ = new_insn_op(0xaf, NULL, NULL);
+	} |
+	lvalue {
+		/* convert store op to load op */
+		struct evm_insn_s *insn = $1;
+		if (insn->opcode >= 0xc0 && insn->opcode < 0xf0) {
+			insn->opcode -= 0x08;
+		}
+		else if (insn->opcode >= 0x40 && insn->opcode < 0x80) {
+			insn->opcode -= 0x40;
+		}
+		else
+			abort();
+		$$ = insn;
+	} |
+	'&' TOK_ID {
+		struct nametab_entry_s *e = find_nametab_entry($2);
 		if (!e) {
-			fprintf(stderr, "Unkown global identifier `%s' in line %d!\n", $1, yyget_lineno());
+			fprintf(stderr, "Unkown global identifier `%s' in line %d!\n", $2, yyget_lineno());
 			exit(1);
 		}
 		switch (e->type)
 		{
+		case VARTYPE_FUNC:
+		case VARTYPE_GLOBAL:
 		case VARTYPE_ARRAY_8U:
-			$$ = new_insn_op_absaddr(0xc0 + 4, e->addr, $3, NULL);
-			break;
 		case VARTYPE_ARRAY_8S:
-			$$ = new_insn_op_absaddr(0xd0 + 4, e->addr, $3, NULL);
-			break;
 		case VARTYPE_ARRAY_16:
-			$$ = new_insn_op_absaddr(0xe0 + 4, e->addr, $3, NULL);
+			$$ = new_insn_op_absaddr(0x9a, e->addr, NULL, NULL);
+			break;
+		case VARTYPE_LOCAL:
+			$$ = new_insn_op(0xaf, NULL, NULL);
+			$$ = new_insn_op_val(0x9a, 2 * (e->index + 1), $$, NULL);
+			$$ = new_insn_op(0x80 + 1, $$, NULL);
 			break;
 		default:
-			fprintf(stderr, "Identifier `%s' used incorrectly in line %d!\n", $1, yyget_lineno());
+			fprintf(stderr, "Identifier `%s' used incorrectly in line %d!\n", $2, yyget_lineno());
 			exit(1);
 		}
 	} |

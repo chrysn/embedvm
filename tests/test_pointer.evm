@@ -1,0 +1,59 @@
+
+global g;
+array8u a8u[3];
+array8s a8s[3];
+array16 a16[3];
+
+function print()
+{
+	$uf1(g, a8u[0], a8u[1], a8u[2], a8s[0], a8s[1], a8s[2], a16[0], a16[1], a16[2]);
+}
+
+function main()
+{
+	local ptr1, ptr2, ptr3;
+	local ptr_print;
+
+	print();
+
+	ptr1 = &a8u;
+	ptr2 = &a8s;
+	ptr3 = &a16;
+
+	a8u[0] = 65;
+	a8u[2] = 100;
+
+	a8s[0] = $ptr8u[ptr1, 0];
+	a8s[2] = $ptr8u[ptr1, 2];
+
+	a16[0] = $ptr8u[ptr1];
+	a16[2] = $ptr8u[ptr1 + 2];
+
+	$ptr8u[ptr1]++;
+	$ptr8u[ptr1,1] = 8;
+	$ptr8u[ptr1,2]--;
+
+	$ptr8u[ptr2]++;
+	$ptr8u[ptr2,1] = -8;
+	$ptr8u[ptr2,2]--;
+
+	$ptr16[ptr3]++;
+	$ptr16[ptr3,1] = 1616;
+	$ptr16[ptr3,2]--;
+
+	ptr1 = &g;
+	$ptr16[ptr1] += 8;
+
+	print();
+
+	ptr1 = &ptr2;
+	$ptr16[ptr1] = ptr3 + 2;
+	$ptr16[ptr2] -= 1000;
+	$ptr16[ptr2] *= -1;
+
+	$ptr16[0] -= 3;
+
+	ptr_print = &print;
+	$ptrf[ptr_print]();
+}
+

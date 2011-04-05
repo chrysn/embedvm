@@ -158,6 +158,14 @@ extern void embedvm_exec(struct embedvm_s *vm)
 			break;
 		}
 		break;
+	case 0xae:
+		embedvm_push(vm, vm->sp);
+		vm->ip++;
+		break;
+	case 0xaf:
+		embedvm_push(vm, vm->sfp);
+		vm->ip++;
+		break;
 	case 0xb0 ... 0xb0+15:
 		{
 			uint8_t argc = embedvm_pop(vm);
