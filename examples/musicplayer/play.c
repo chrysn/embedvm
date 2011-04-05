@@ -20,8 +20,7 @@ FILE *aplay_pipe = NULL;
 uint8_t vm_mem[256] = { EMBEDVM_SECT_SRAM_DATA };
 struct embedvm_s vm;
 
-int t, f;
-int insncount;
+int t, insncount;
 
 int16_t mem_read(uint16_t addr, bool is16bit, void *ctx UNUSED)
 {
@@ -43,6 +42,17 @@ void mem_write(uint16_t addr, int16_t value, bool is16bit, void *ctx UNUSED)
 		vm_mem[addr] = value;
 }
 
+void gentone(uint16_t hz, uint16_t ms)
+{
+	int start = t;
+	while (((t++)-start) < ms*44) {
+		double v = sin(2*M_PI*t*hz/44100.0);
+		v = hz == 0 ? 0 : (v > 0 ? 1 : -1);
+		int16_t sample = htons(3000*v);
+		fwrite(&sample, 2, 1, aplay_pipe);
+	}
+}
+
 int16_t call_user(uint8_t funcid UNUSED, uint8_t argc UNUSED, int16_t *argv UNUSED, void *ctx UNUSED)
 {
 #ifndef PROFILE
@@ -54,23 +64,12 @@ int16_t call_user(uint8_t funcid UNUSED, uint8_t argc UNUSED, int16_t *argv UNUS
 			fprintf(stderr, ":%d", argv[i]);
 	}
 #  endif
-	if (funcid == 1 && argc == 1) {
+	if (funcid == 1 && argc == 3) {
 #  ifdef DEBUG
-		fprintf(stderr, " f:%d", argv[0]);
+		fprintf(stderr, " t:%d:%d:%d", argv[0], argv[1], argv[2]);
 #  endif
-		f = argv[0];
-	}
-	if (funcid == 2 && argc == 1) {
-		int start = t;
-#  ifdef DEBUG
-		fprintf(stderr, " w:%d", argv[0]);
-#  endif
-		while (((t++)-start) < argv[0]*44) {
-			double v = sin(2*M_PI*t*f/44100.0);
-			v = f == 0 ? 0 : (v > 0 ? 1 : -1);
-			int16_t sample = htons(3000*v);
-			fwrite(&sample, 2, 1, aplay_pipe);
-		}
+		gentone(argv[0], argv[1]);
+		gentone(0, argv[2]);
 	}
 #endif
 	return 0;

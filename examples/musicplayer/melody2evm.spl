@@ -97,10 +97,9 @@ write(<:>
 	:			break;
 	:		timeidx = melody_data[i] & 31;
 	:		// $$uf0(i, tone, timeidx);
-	:		$$uf1(melody_freq[tone >> 5]);
-	:		$$uf2($timescale * melody_timing_on[timeidx]);
-	:		$$uf1(0);
-	:		$$uf2($timescale * melody_timing_off[timeidx]);
+	:		$$uf1(melody_freq[tone >> 5],
+	:			$timescale * melody_timing_on[timeidx],
+	:			$timescale * melody_timing_off[timeidx]);
 	:	}
 	: }
 </>);
