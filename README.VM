@@ -54,6 +54,9 @@ pops its operands from the stack and pushes the result).
 The return address for the current function is stored in the 16-bit word
 on SFP + 2 and the parent stack frame pointer at SFP + 4.
 
+All variables on the stack must be aligned on even addresses. So the stack
+pointer must be initialized to an even address (LSB not set).
+
 
 Instruction Encoding
 --------------------

@@ -105,6 +105,8 @@ exit_with_helpmsg:
 	while (!stop) {
 		if (vm.ip == 0xffff) {
 			printf("Main function returned => Terminating.\n");
+			if (vm.sp != 0 || vm.sfp != 0)
+				printf("Unexpected stack configuration on program exit: SP=%04x, SFP=%04x\n", vm.sp, vm.sfp);
 			fflush(stdout);
 			break;
 		}

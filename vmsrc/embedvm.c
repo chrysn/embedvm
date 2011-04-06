@@ -109,7 +109,10 @@ extern void embedvm_exec(struct embedvm_s *vm)
 		vm->sp = vm->sfp;
 		vm->ip = embedvm_pop(vm);
 		vm->sfp = embedvm_pop(vm);
-		embedvm_push(vm, a);
+		if ((vm->sfp & 1) != 0)
+			vm->sfp &= ~1;
+		else
+			embedvm_push(vm, a);
 		break;
 	case 0x9d:
 		embedvm_pop(vm);
@@ -117,8 +120,13 @@ extern void embedvm_exec(struct embedvm_s *vm)
 		break;
 	case 0x9e:
 		addr = embedvm_pop(vm);
-		embedvm_push(vm, vm->sfp);
-		embedvm_push(vm, vm->ip + 1);
+		if (vm->mem_read(vm->ip+1, false, vm->user_ctx) == 0x9d) {
+			embedvm_push(vm, vm->sfp | 1);
+			embedvm_push(vm, vm->ip + 2);
+		} else {
+			embedvm_push(vm, vm->sfp);
+			embedvm_push(vm, vm->ip + 1);
+		}
 		vm->sfp = vm->sp;
 		vm->ip = addr;
 		break;
@@ -141,8 +149,13 @@ extern void embedvm_exec(struct embedvm_s *vm)
 			break;
 		case 0xa2:
 		case 0xa3:
-			embedvm_push(vm, vm->sfp);
-			embedvm_push(vm, vm->ip);
+			if (vm->mem_read(vm->ip, false, vm->user_ctx) == 0x9d) {
+				embedvm_push(vm, vm->sfp | 1);
+				embedvm_push(vm, vm->ip + 1);
+			} else {
+				embedvm_push(vm, vm->sfp);
+				embedvm_push(vm, vm->ip);
+			}
 			vm->sfp = vm->sp;
 			vm->ip = addr;
 			break;
@@ -265,7 +278,7 @@ extern void embedvm_exec(struct embedvm_s *vm)
 
 void embedvm_interrupt(struct embedvm_s *vm, uint16_t addr)
 {
-	embedvm_push(vm, vm->sfp);
+	embedvm_push(vm, vm->sfp | 1);
 	embedvm_push(vm, vm->ip);
 	vm->sfp = vm->sp;
 	vm->ip = addr;
