@@ -1,0 +1,209 @@
+#!/usr/bin/env python
+
+import sys
+
+class Bin2Py(object):
+    OPERATOR_OPCODES1 = {
+            0x8c: '~',
+            0x8d: '-',
+            0x8e: '!',
+            }
+    OPERATOR_OPCODES2 = {
+            0x80: '+',
+            0x81: '-',
+            0x82: '*',
+            0x83: '/',
+            0x84: '%',
+            0x85: '<<',
+            0x86: '>>',
+            0x87: '&',
+            0x88: '|',
+            0x89: '^',
+            0x8a: 'and',
+            0x8b: 'or',
+
+            0xa8: '<',
+            0xa9: '<=',
+            0xaa: '==',
+            0xab: '!=',
+            0xac: '>=',
+            0xad: '>',
+            }
+    def __init__(self):
+        self.lines = []
+        self.gotolines = set()
+        self.calllines = set()
+
+    def feed(self, data, code_offset):
+        def p(l):
+            self.lines.append((opcodepos, l))
+
+        initial_data = data[:code_offset].rstrip('\0')
+        zeros = code_offset - len(initial_data)
+        gv_vals = []
+        if initial_data:
+            gv_vals.append(repr([ord(x) for x in initial_data]))
+        if zeros:
+            gv_vals.append("[0]*%d"%zeros)
+        if not gv_vals:
+            gv_vals.append("[]")
+        self.lines.append((0, 'gv = ' + " + ".join(gv_vals)))
+
+        pos = code_offset
+
+        while pos < len(data):
+            opcodepos = pos
+            opcode = ord(data[pos])
+
+            if 0 <= opcode < 0x40:
+                sfa = signext(opcode, 0x3f)
+                if sfa < 0:
+                    p("lv.append(arguments[%d])"%sfa)
+                else:
+                    p("lv.append(lv[%d])"%sfa)
+            elif 0x40 <= opcode < 0x80:
+                sfa = signext(opcode, 0x3f)
+                if sfa < 0:
+                    p("arguments[%d] = lv.pop()"%sfa)
+                else:
+                    p("lv[%d] = lv.pop()"%sfa)
+            elif opcode in self.OPERATOR_OPCODES1:
+                p("lv.append(%slv.pop())"%self.OPERATOR_OPCODES1[opcode])
+            elif opcode in self.OPERATOR_OPCODES2:
+                p("swap = lv.pop(); lv.append(lv.pop() %s swap)"%self.OPERATOR_OPCODES2[opcode])
+            elif 0x90 <= opcode < 0x98:
+                val = signext(opcode, 0x07) # FIXME: why is there an & 0x04 and |= ~0x07?
+                p("lv.append(%d)"%val)
+            elif opcode == 0x98:
+                pos += 1
+                p("lv.append(%d)"%ord(data[pos]))
+            elif opcode == 0x99:
+                pos += 1
+                p("lv.append(%d)"%signext(ord(data[pos]), 0xff))
+            elif opcode == 0x9a:
+                pos += 2
+                p("lv.append(%d)"%signext((ord(data[pos-1])<<8)|ord(data[pos]), 0xffff))
+            elif opcode == 0x9b:
+                p("return lv.pop()")
+            elif opcode == 0x9c:
+                p("return 0")
+            elif opcode == 0x9d:
+                p("lv.pop()")
+            elif opcode == 0x9e:
+                p("9e -- call lv.pop()")
+                # FIXME
+            elif opcode == 0x9f:
+                p("9f -- goto lv.pop()")
+                # FIXME
+            elif 0xa0 <= opcode < 0xa8:
+                if opcode % 2:
+                    address = pos + signext((ord(data[pos+1])<<8)|ord(data[pos+2]), 0xffff)
+                    pos += 2
+                else:
+                    address = pos + signext(ord(data[pos+1]), 0xff)
+                    pos += 1
+                if 0xa0 <= opcode < 0xa2:
+                    self.gotolines.add(address)
+                    p("goto ._line_%x"%address)
+                elif 0xa2 <= opcode < 0xa4:
+                    self.calllines.add(address)
+                    p("lv.append(_function_%x([], lv))"%address)
+                elif 0xa4 <= opcode < 0xa6:
+                    self.gotolines.add(address)
+                    p("if lv.pop():\n    goto ._line_%x"%address) # linebreak: python goto module has problems with one-line if/goto statemeents
+                elif 0xa6 <= opcode < 0xa8:
+                    self.gotolines.add(address)
+                    p("if not lv.pop():\n    goto ._line_%x"%address) # same
+            elif 0xb0 <= opcode < 0xc0:
+                userfunc = opcode & 0x0f
+                p("lv.append(userfunc(%d, lv))"%userfunc)
+            elif 0xc0 <= opcode < 0xf0:
+                vartype = (opcode & 0x30) >> 4
+                store = (opcode & 0x08) >> 3
+                memmode = opcode & 0x07
+
+                if memmode < 5:
+                    # the 'M' lines
+                    if memmode in (0, 3):
+                        fixedaddress = ord(data[pos+1])
+                        pos += 1
+                    elif memmode in (1, 4):
+                        fixedaddress = (ord(data[pos+1])<<8) + ord(data[pos+2])
+                        pos += 2
+                    else:
+                        fixedaddress = 0
+
+                    if memmode < 2:
+                        address = fixedaddress
+                    elif memmode == 2:
+                        address = "lv.pop() + %d"%fixedaddress
+                    else:
+                        if vartype == 2:
+                            address = "2*lv.pop() + %d"%fixedaddress
+                        else:
+                            address = "lv.pop() + %d"%fixedaddress
+
+                    # FIXME: ignores signedness
+                    if (vartype, store) in ((0, 0), (1, 0)):
+                        command = 'lv.append(gv[address])'
+                    elif (vartype, store) in ((0, 1), (1, 1)):
+                        command = 'gv[address] = lv.pop() & 0xff'
+                    elif (vartype, store) == (2, 0):
+                        command = 'lv.append((gv[address]<<8) + gv[address+1])'
+                    elif (vartype, store) == (2, 1):
+                        command = 'gv[address:address+2] = divmod(lv.pop(), 0xff)'
+
+                    p('address = %s; %s'%(address, command))
+                else:
+                    # the 'K' lines
+                    k = opcode>>3 & 0x07
+                    mode = opcode & 0x07
+                    if mode == 5:
+                        # bury
+                        p('lv.insert(-%d, lv[-1])'%(k+1))
+                    elif mode == 6:
+                        # dig
+                        p('lv.append(lv.pop(-%d))'%(k+2))
+
+            elif 0xf0 <= opcode < 0xf8:
+                n = opcode & 0x07
+                p("; ".join("lv.append(0)" for x in range(n+1)))
+            elif 0xf8 <= opcode <= 0xff:
+                n = opcode & 0x07
+                p("lv[-%d:-1] = []"%(n+2))
+            else:
+                raise Exception("Wrong input encoding?")
+
+            pos += 1
+
+    def get_output(self):
+        indent = ""
+        result = []
+        result.append("from goto import goto, label\nfrom evm import *\nlv = []\n\n")
+        for (lineno, line) in self.lines:
+            if lineno in self.calllines:
+                result.append('def _function_%x(lv, arguments):\n'%lineno)
+                assert indent == ""
+                indent = "    "
+            if lineno in self.gotolines:
+                result.append(indent + 'label ._line_%x\n'%lineno)
+
+            if line.startswith('return '):
+                if indent != "    ":
+                    result.append("# unindented return, ignoring %r\n"%line)
+                else:
+                    result.append(indent + line + '\n')
+                    indent = ""
+            else:
+                result.append(indent + line.replace('\n', '\n'+indent) + '\n')
+        return "".join(result)
+
+def main():
+    bp = Bin2Py()
+    bp.feed(open(sys.argv[1]).read(), int(sys.argv[2]))
+    converted = bp.get_output()
+    with open(sys.argv[3], 'w') as f:
+        f.write(converted)
+
+if __name__ == "__main__":
+    main()
