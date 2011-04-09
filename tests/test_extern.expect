@@ -1,3 +1,3 @@
-Called user function 1 with 6 args: 1 2 3 4 5 100
-Called user function 2 with 3 args: 1000 2000 3000
+Called user function 1 with 5 args: 1 2 3 4 5
+Called user function 2 with 3 args: 100 200 -100
 Main function returned => Terminating.

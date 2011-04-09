@@ -43,6 +43,8 @@
 
 "local"		return TOK_LOCAL;
 "global"	return TOK_GLOBAL;
+"global8u"	return TOK_GLOBAL_8U;
+"global8s"	return TOK_GLOBAL_8S;
 
 "array8u"	return TOK_ARRAY_8U;
 "array8s"	return TOK_ARRAY_8S;
@@ -105,6 +107,25 @@
 <comment>.|\n
 
 "//"[^\n]*\n
+
+"$include"[ \t]+\"[^\"]+\" {
+	char *fn = strdup(yytext);
+	fn = strtok(fn, "\"");
+	fn = strtok(NULL, "\"");
+	yyin = fopen(fn, "r" );
+	if (yyin == NULL) {
+		fprintf(stderr, "Can't open include file `%s'!\n", fn);
+		exit(1);
+	}
+	yypush_buffer_state(yy_create_buffer(yyin, YY_BUF_SIZE));
+}
+
+<<EOF>> {
+	yypop_buffer_state();
+	if (!YY_CURRENT_BUFFER)
+		yyterminate();
+}
+
 
 [ \t\n\r]	/* ignore whitespaces */
 .		return *yytext;

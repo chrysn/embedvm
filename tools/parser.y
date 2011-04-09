@@ -89,7 +89,8 @@ struct func_call_args_desc_s {
 
 %token TOK_IF TOK_ELSE TOK_DO TOK_FOR TOK_WHILE
 %token TOK_BREAK TOK_CONTINUE TOK_GOTO TOK_RETURN TOK_FUNCTION
-%token TOK_LOCAL TOK_GLOBAL TOK_ARRAY_8U TOK_ARRAY_8S TOK_ARRAY_16
+%token TOK_LOCAL TOK_GLOBAL TOK_GLOBAL_8U TOK_GLOBAL_8S
+%token TOK_ARRAY_8U TOK_ARRAY_8S TOK_ARRAY_16
 %token TOK_EXTERN TOK_MEMADDR TOK_SECTION TOK_TRAMPOLINE
 %token TOK_LINE TOK_VMIP TOK_VMSP TOK_VMSFP
 %token TOK_PTR_8U TOK_PTR_8S TOK_PTR_16 TOK_PTR_F
@@ -122,7 +123,7 @@ struct func_call_args_desc_s {
 %type <insn> maybe_core_statement expression ptr_index
 
 %type <number> function_args function_vars function_var_list
-%type <number> array_type ptr_type combined_assign number
+%type <number> array_type global_type ptr_type combined_assign number
 %type <number> maybe_extern function_head
 %type <ainit> array_init array_init_data
 %type <loopctx> loop_body
@@ -207,6 +208,11 @@ array_type:
 	TOK_ARRAY_8S { $$ = VARTYPE_ARRAY_8S; } |
 	TOK_ARRAY_16 { $$ = VARTYPE_ARRAY_16; };
 
+global_type:
+	TOK_GLOBAL { $$ = VARTYPE_GLOBAL; } |
+	TOK_GLOBAL_8U { $$ = VARTYPE_GLOBAL_8U; } |
+	TOK_GLOBAL_8S { $$ = VARTYPE_GLOBAL_8S; };
+
 number:
 	TOK_NUMBER { $$ = $1; } |
 	'+' TOK_NUMBER { $$ = $2; } |
@@ -247,11 +253,11 @@ maybe_extern:
 	TOK_EXTERN TOK_NUMBER { $$ = $2; };
 
 global_data:
-	maybe_extern TOK_GLOBAL TOK_ID global_var_init ';' {
-		$$ = new_insn_data(2, NULL, NULL);
+	maybe_extern global_type TOK_ID global_var_init ';' {
+		$$ = new_insn_data($2 == VARTYPE_GLOBAL ? 2 : 1, NULL, NULL);
 		$$->symbol = strdup($3);
 		$$->initdata = $4;
-		add_nametab_global($3, VARTYPE_GLOBAL, $$);
+		add_nametab_global($3, $2, $$);
 		if ($1 >= 0) {
 			if ($4 != NULL) {
 				fprintf(stderr, "Error in line %d: Extern declaration of `%s' with initializer!\n", yyget_lineno(), $3);
@@ -552,6 +558,12 @@ lvalue:
 		case VARTYPE_GLOBAL:
 			$$ = new_insn_op_absaddr(0xe8 + 1, e->addr, NULL, NULL);
 			break;
+		case VARTYPE_GLOBAL_8U:
+			$$ = new_insn_op_absaddr(0xc8 + 1, e->addr, NULL, NULL);
+			break;
+		case VARTYPE_GLOBAL_8S:
+			$$ = new_insn_op_absaddr(0xd8 + 1, e->addr, NULL, NULL);
+			break;
 		default:
 			fprintf(stderr, "Identifier `%s' used incorrectly in line %d!\n", $1, yyget_lineno());
 			exit(1);
@@ -685,6 +697,8 @@ expression:
 		{
 		case VARTYPE_FUNC:
 		case VARTYPE_GLOBAL:
+		case VARTYPE_GLOBAL_8U:
+		case VARTYPE_GLOBAL_8S:
 		case VARTYPE_ARRAY_8U:
 		case VARTYPE_ARRAY_8S:
 		case VARTYPE_ARRAY_16:
