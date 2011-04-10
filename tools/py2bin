@@ -1,0 +1,486 @@
+#!/usr/bin/env python
+
+import sys
+import ast
+from asm import joining
+import bytecode
+
+deduplicate = lambda iterable: reduce(lambda a, b: a if b in a else a+[b], iterable, [])
+
+class Label(object):
+    """Like a byte code, but results in null-length bytecode and can be used
+    for jump calculations"""
+    def __init__(self, descr):
+        self.descr = descr # for debugging purposes
+    def __repr__(self):
+        return '<%s %s>'%(type(self).__name__, self.descr)
+
+class Jump(object):
+    """Placeholder object for a jump whose destination is not yet known"""
+    def __init__(self, address):
+        self.address = address # typically, this is a Label
+    def __repr__(self):
+        return '<%s %s>'%(type(self).__name__, self.address)
+
+class JumpIf(Jump): pass
+class JumpIfNot(Jump): pass
+
+class UserFunction(object): pass
+
+class Globals(object):
+    def __init__(self):
+        self.assigned = []
+        self.named = {}
+        self.pos = 0
+
+    def getattr(self, attr):
+        if attr in self.accessor_types:
+            return self.accessor_types[attr](self)
+        if attr in self.named:
+                return self.named[attr]
+        raise AttributeError()
+
+    def setattr(self, attr, value):
+        self.assigned.append((self.pos, value))
+        self.named[attr] = value
+        value.pos = self.pos
+        self.pos += value.bytes
+
+    class View(object):
+        def __init__(self, gv):
+            self.gv = gv
+
+        def call(self, args, starargs, keywords, kwargs):
+            if args or starargs or kwargs:
+                raise Exception("Can't handle those arguments")
+            keywords_converted = {}
+            for k in keywords:
+                if isinstance(k.value, ast.Num):
+                    keywords_converted[k.arg] = k.value.n
+                else:
+                    raise Exception("Can't handle argument")
+
+            self.init = keywords_converted.pop('init', None)
+            if 'length' in keywords_converted:
+                self.length = keywords_converted.pop('length', None)
+            if self.length is None and self.init is None:
+                raise Exception("Global variable is underspecified.")
+
+            if self.length is None:
+                self.length = len(self.init)
+
+            self.bytes = self.length * self.bytes_per_item
+
+            return self
+
+    class SingleView(View):
+        bytes_per_item = 1
+        def assign_pop(self):
+            return self.store_code(address=self.pos, m=0 if self.pos < 256 else 1)
+        def value_push(self):
+            return self.load_code(address=self.pos, m=0 if self.pos < 256 else 1)
+        def assign_pop_indexpop(self):
+            raise Exception("Can not index a scalar")
+        def value_push_indexpop(self):
+            raise Exception("Can not index a scalar")
+    class ArrayView(View):
+        bytes_per_item = 2
+        def assign_pop(self):
+            raise Exception("Can not assign a stack value to an array")
+        def value_push(self):
+            raise Exception("Can not push the array on the stack")
+        def assign_pop_indexpop(self):
+            return self.store_code(address=self.pos, m=3 if self.pos < 256 else 4)
+        def value_push_indexpop(self):
+            return self.load_code(address=self.pos, m=3 if self.pos < 256 else 4)
+
+    class SingleView8s(SingleView):
+        length = 1
+        store_code = bytecode.GlobalStoreS8
+        load_code = bytecode.GlobalLoadS8
+    class SingleView8u(SingleView):
+        length = 1
+        store_code = bytecode.GlobalStoreU8
+        load_code = bytecode.GlobalLoadU8
+    class SingleView16(SingleView):
+        length = 1
+        store_code = bytecode.GlobalStore16
+        load_code = bytecode.GlobalLoad16
+    class ArrayView8s(ArrayView):
+        store_code = bytecode.GlobalStoreS8
+        load_code = bytecode.GlobalLoadS8
+    class ArrayView8u(ArrayView):
+        store_code = bytecode.GlobalStoreU8
+        load_code = bytecode.GlobalLoadU8
+    class ArrayView16(ArrayView):
+        store_code = bytecode.GlobalStore16
+        load_code = bytecode.GlobalLoad16
+
+    accessor_types = {
+            'int8s': SingleView8s,
+            'int8u': SingleView8u,
+            'int16': SingleView16,
+            'array8s': ArrayView8s,
+            'array8u': ArrayView8u,
+            'array16': ArrayView16,
+            }
+
+class Function(object):
+    def __init__(self, name, args, body):
+        self.name = name
+        self.args = args
+        self.body = body
+        self.code = []
+        self.locals = []
+
+    def _locals_from_statement(self, statement):
+        if hasattr(statement, "targets"):
+            for t in statement.targets:
+                if isinstance(t, ast.Name):
+                    self.locals.append(t.id)
+        if hasattr(statement, "target"):
+            if isinstance(statement.target, ast.Name):
+                self.locals.append(statement.target.id)
+        if hasattr(statement, "body"):
+            for s in statement.body:
+                self._locals_from_statement(s)
+
+    def _resolve_attribute(self, e, context):
+        if not isinstance(e.value, ast.Name):
+            raise Exception("Only one-level attributes implemented")
+        if e.value.id not in context.globals:
+            raise Exception("Not a global variable")
+        # FIXME: check for whatever can go wrong as well
+        return context.globals[e.value.id].getattr(e.attr)
+
+    def _push_expression(self, e, context):
+        if isinstance(e, ast.Name):
+            if e.id in self.locals:
+                self.code.append(bytecode.PopLocal(self.locals.index(e.id)))
+            else:
+                raise Exception("Can not access non-local name")
+        elif isinstance(e, ast.Attribute):
+            self.code.append(self._resolve_attribute(e, context).value_push())
+        elif isinstance(e, ast.Subscript):
+            if not isinstance(e.value, ast.Attribute):
+                raise Exception("Local arrays not implemented")
+            valobj = self._resolve_attribute(e.value, context)
+            # TBD: opfimization for constant offsets 
+            self._push_expression(e.slice.value, context)
+            self.code.append(valobj.value_push_indexpop())
+        elif isinstance(e, ast.UnaryOp):
+            self._push_expression(e.operand, context)
+            if isinstance(e.op, ast.UAdd):
+                return # a no-op here
+            op2code = {
+                    ast.Not: bytecode.LogicNot,
+                    ast.Invert: bytecode.BitwiseNot,
+                    ast.USub: bytecode.ArithmeticInvert,
+                    }
+            self.code.append(op2code[type(e.op)]())
+        elif isinstance(e, ast.BinOp):
+            self._push_expression(e.left, context)
+            self._push_expression(e.right, context)
+            op2code = {
+                    ast.Add: bytecode.Add,
+                    ast.Sub: bytecode.Sub,
+                    ast.Mult: bytecode.Mul,
+                    ast.Div: bytecode.Div,
+                    ast.Mod: bytecode.Mod,
+                    ast.LShift: bytecode.ShiftLeft,
+                    ast.RShift: bytecode.ShiftRight,
+                    ast.BitAnd: bytecode.BitwiseAnd,
+                    ast.BitOr: bytecode.BitwiseOr,
+                    ast.BitXor: bytecode.BitwiseXor,
+                    ast.And: bytecode.LogicAnd, # TBD: short circuit logic -- easily possible?
+                    ast.Or: bytecode.LogicOr,
+                    }
+            self.code.append(op2code[type(e.op)]())
+        elif isinstance(e, ast.Compare):
+            # TBD: short circuit logic
+            is_first = True
+            for (left, right, op) in zip([e.left]+e.comparators[:-1], e.comparators, e.ops):
+                self._push_expression(right, context)
+                self._push_expression(left, context)
+                if op in (ast.Is, ast.IsNot, ast.In, ast.NotIn):
+                    raise Exception("Comparison not implemented")
+                op2code = {
+                        ast.Eq: bytecode.CompareEE,
+                        ast.NotEq: bytecode.CompareNE,
+                        ast.Lt: bytecode.CompareLT,
+                        ast.Gt: bytecode.CompareGT,
+                        ast.LtE: bytecode.CompareLE,
+                        ast.GtE: bytecode.CompareGE,
+                        }
+                self.code.append(op2code[type(op)]())
+                if not is_first:
+                    self.code.append(bytecode.LogicAnd())
+                is_first = False
+        elif isinstance(e, ast.Num):
+            if not isinstance(e.n, int):
+                raise Exception("Unsupported number type %s"%type(e.n))
+            if -4 <= e.n < 4:
+                self.code.append(bytecode.PushImmediate(val=e.n))
+            elif -128 <= e.n < 127:
+                self.code.append(bytecode.PushS8(value=e.n))
+            elif 0 <= e.n < 256:
+                self.code.append(bytecode.PushU8(value=e.n))
+            elif 0 <= e.n < 0x10000:
+                self.code.append(bytecode.Push16(value=e.n))
+            else:
+                raise Exception("Integer overflow")
+        elif isinstance(e, ast.Call):
+            # either it's a userfunc or a normal function
+            if not isinstance(e.func, ast.Name):
+                raise Exception("Callables can only have simple names") # could be replaced to do function pointer stuff
+            if e.func.id in context.globals:
+                if context.globals[e.func.id] != UserFunction:
+                    raise Exception("Can not call global")
+                if e.starargs or e.keywords or e.kwargs or not len(e.args):
+                    raise Exception("User functions only supported with >= positional argument(s)")
+                if not isinstance(e.args[0], ast.Num) or type(e.args[0].n) != int:
+                    raise Exception("User function has to be called with static first argument")
+                for a in e.args[1::-1]:
+                    self._push_expression(a, context)
+                self._push_expression(ast.Num(n=len(e.args)-1), context)
+                self.code.append(bytecode.CallUserFunction(e.args[0].n))
+        else:
+            self.code.append("push %r"%e)
+
+    def _parse_assign(self, s, context):
+        # in any case, evaluate the right side to stack top, then pop it into the left side
+        # right side
+        self._push_expression(s.value, context)
+
+        # left side
+        for x in range(len(s.targets)-1):
+            self.code.append(bytecode.Bury(k=0)) # duplicate top element
+        for t in s.targets:
+            if isinstance(t, ast.Name):
+                if t.id in self.locals:
+                    self.code.append(bytecode.PushLocal(self.locals.index(t.id)))
+                else:
+                    raise Exception("Can not assign to non-local name")
+            elif isinstance(t, ast.Attribute):
+                self.code.append(self._resolve_attribute(t, context).assign_pop())
+            elif isinstance(t, ast.Subscript):
+                if not isinstance(t.value, ast.Attribute):
+                    raise Exception("Local arrays not implemented")
+                valobj = self._resolve_attribute(t.value, context)
+                # TBD: opfimization for constant offsets 
+                self._push_expression(t.slice.value, context)
+                self.code.append(valobj.assign_pop_indexpop())
+            else:
+                self.code.append("assign that to %s"%t)
+
+    def _parse_range(self, s):
+        if not isinstance(s, ast.Call) or not isinstance(s.func, ast.Name) or s.func.id not in ('range', 'xrange'):
+            raise Exception("For loops only supported with range iterators")
+        if s.starargs or s.keywords or s.kwargs or len(s.args) not in range(1, 4):
+            raise Exception("(x)range only supported with 1-3 positional arguments")
+        if len(s.args) == 1:
+            start, stop, step = ast.Num(n=0), s.args[0], ast.Num(n=1)
+        elif len(s.args) == 2:
+            start, stop, step = s.args[0], s.args[1], ast.Num(n=1)
+        else:
+            start, stop, step = s.args
+
+        return start, stop, step
+
+    def _parse(self, s, context):
+        if isinstance(s, ast.Assign):
+            self._parse_assign(s, context)
+        elif isinstance(s, ast.For):
+            if not isinstance(s.target, ast.Name):
+                raise Exception("Iteration over non-locals is not supported.")
+            loopcountlocal = self.locals.index(s.target.id)
+            # loop setup
+            start, stop, step = self._parse_range(s.iter)
+            if isinstance(step, ast.Num) and isinstance(step.n, int):
+                self._push_expression(stop, context)
+                self._push_expression(start, context)
+
+                loop_compare = Label("comp")
+                loop_regular_end = Label("regend")
+                loop_break_end = Label("breakend")
+                loop_continue = Label("continue")
+                self.code.append(loop_compare)
+
+                self.code.append(bytecode.Dig(k=0)) # get a copy of start + i*step
+                self.code.append(bytecode.Dig(k=2)) # get a copy of end
+                if step.n > 0:
+                    self.code.append(bytecode.CompareGE())
+                else:
+                    self.code.append(bytecode.CompareLE())
+                self.code.append(JumpIf(address=loop_regular_end))
+
+                # store current iteration counter
+                self.code.append(bytecode.Dig(k=0))
+                self.code.append(bytecode.PushLocal(sfa=loopcountlocal))
+
+                # process body
+                for iterated_s in s.body:
+                    self._parse(iterated_s, context)
+
+                # increment counter, jump to top
+                self.code.append(loop_continue)
+                self._push_expression(step, context)
+                self.code.append(bytecode.Dig(k=1))
+                self.code.append(bytecode.Sub())
+                self.code.append(Jump(address=loop_compare))
+
+                self.code.append(loop_regular_end)
+
+                # process else
+                for iterated_s in s.orelse:
+                    self._parse(iterated_s, context)
+
+                self.code.append(loop_break_end)
+
+                self.code.append(bytecode.PopMany(n=1)) # remove start, remove end
+            else:
+                raise Exception("Variable step not supported")
+
+        elif isinstance(s, ast.If):
+            if_end = Label("endif")
+            if_else = Label("else")
+            self._push_expression(s.test, context)
+            self.code.append(JumpIfNot(address=if_else))
+            for iterated_s in s.body:
+                self._parse(iterated_s, context)
+            if s.orelse:
+                self.code.append(Jump(address=if_end))
+                self.code.append(if_else)
+                for iterated_s in s.orelse:
+                    self._parse(iterated_s, context)
+                self.code.append(if_end)
+            else:
+                self.code.append(if_else)
+
+        elif isinstance(s, ast.Expr):
+            self._push_expression(s.value, context)
+            self.code.append(bytecode.DropValue())
+        elif isinstance(s, ast.Pass):
+            pass
+
+        elif isinstance(s, ast.While):
+            # body, test, orelse
+            while_start = Label("whilestart")
+            while_else = Label("whileelse")
+            while_end = Label("whileend")
+
+            self.code.append(while_start)
+
+            self._push_expression(s.test, context)
+            self.code.append(JumpIfNot(address=while_else))
+
+            for iterated_s in s.body:
+                self._parse(iterated_s, context)
+            self.code.append(Jump(while_start))
+            self.code.append(while_else)
+            for iterated_s in s.orelse:
+                self._parse(iterated_s, context)
+            self.code.append(while_end)
+
+        else:
+            self.code.append("unknown statement %s"%s)
+
+    def parse(self, context):
+        # analyze local variables
+        for statement in self.body:
+            self._locals_from_statement(statement)
+        self.locals = deduplicate(self.locals)
+
+        self.code.append(bytecode.PushZeros(len(self.locals)-1))
+
+        for statement in self.body:
+            self._parse(statement, context)
+
+class Py2Bin(object):
+    def __init__(self):
+        self.globals = {}
+        self.funcs = {}
+
+    def _parse_global_statement(self, statement):
+        if isinstance(statement, ast.ImportFrom):
+            if statement.module == "evm":
+                for n in statement.names:
+                    if n.name == 'Globals':
+                        self.globals[n.asname or 'Globals'] = Globals
+                    elif n.name == 'userfunc':
+                        self.globals[n.asname or 'userfunc'] = UserFunction
+                    else:
+                        raise Exception("No object %s in evm."%n.name)
+            else:
+                raise Exception("Can not import unknown modules.")
+
+        elif isinstance(statement, ast.Assign):
+            if isinstance(statement.value, ast.Call):
+                # probably something globals related
+                if isinstance(statement.value.func, ast.Name) and \
+                        statement.value.func.id in self.globals and \
+                        self.globals[statement.value.func.id] == Globals:
+                    if statement.value.args or statement.value.starargs or statement.value.kwargs or statement.value.keywords:
+                        raise Exception("Unknown arguments.")
+                    for t in statement.targets:
+                        if not isinstance(t, ast.Name):
+                            raise Exception("Can't assign globals to anything than a name.")
+                        self.globals[t.id] = Globals()
+
+                elif isinstance(statement.value.func, ast.Attribute):
+                    if not isinstance(statement.value.func.value, ast.Name):
+                        raise Exception("Can't resolve attribute")
+                    value_name = statement.value.func.value.id
+                    if value_name not in self.globals:
+                        raise Exception("Unknown variable")
+                    accessed = self.globals[value_name].getattr(statement.value.func.attr)
+                    retval = accessed.call(statement.value.args, statement.value.starargs, statement.value.keywords, statement.value.kwargs)
+
+                    for t in statement.targets:
+                        if not isinstance(t, ast.Attribute):
+                            raise Exception("Only globals can be a global")
+                        if not isinstance(t.value, ast.Name):
+                            raise Exception("Can only assign to second level attributes")
+                        if t.value.id not in self.globals:
+                            raise Exception("Unknown variable")
+                        self.globals[t.value.id].setattr(t.attr, retval)
+            else:
+                raise Exception("Global variables can only be declared using the Globals() mechanisms for type strictness reasons.")
+
+        elif isinstance(statement, ast.FunctionDef):
+            self.funcs[statement.name] = Function(statement.name, statement.args, statement.body)
+
+        elif isinstance(statement, ast.If):
+            if statement.orelse or not isinstance(statement.test, ast.Compare) or len(statement.test.ops) != 1 or not isinstance(statement.test.ops[0], ast.Eq) or not isinstance(statement.test.left, ast.Name) or statement.test.left.id != '__name__' or len(statement.test.comparators) != 1 or not isinstance(statement.test.comparators[0], ast.Str) or statement.test.comparators[0].s != '__main__':
+                raise Exception("The only allowed top-level if is an `if __name__ == \"__main__\".")
+
+        else:
+            print "unknown statement", statement
+
+    def feed(self, data):
+        t = ast.parse(data)
+
+        for statement in t.body:
+            self._parse_global_statement(statement)
+
+        for fn, f in self.funcs.items():
+            f.parse(self)
+
+    @joining
+    def get_output(self):
+        for (k, v) in self.globals.items():
+            yield "%s = %s"%(k, repr(v))
+        for (n, f) in self.funcs.items():
+            yield n + ":"
+            for l in f.code:
+                yield "  " + repr(l)
+
+def main():
+    pb = Py2Bin()
+    pb.feed(open(sys.argv[1]).read())
+    converted = pb.get_output()
+    with open(sys.argv[2], 'w') as f:
+        f.write(converted)
+
+if __name__ == "__main__":
+    main()
