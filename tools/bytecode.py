@@ -80,6 +80,18 @@ class BitwiseXor(BinaryOperator): command = 0x89
 class LogicAnd(BinaryOperator): command = 0x8a
 class LogicOr(BinaryOperator): command = 0x8b
 
+def PushConstant(n):
+    if -4 <= n < 4:
+        return PushImmediate(val=n)
+    elif -128 <= n < 127:
+        return PushS8(value=n)
+    elif 0 <= n < 256:
+        return PushU8(value=n)
+    elif 0 <= n < 0x10000:
+        return Push16(value=n)
+    else:
+        raise ValueError("Integer overflow")
+
 class PushImmediate(ByteCodeCommand):
     command = 0x90
     commandmask = 0xf8

@@ -6,7 +6,7 @@ PopLocal.to_python = lambda self: ("arguments[%d] = lv.pop()" if self.sfa < 0 el
 UnaryOperator.to_python = lambda self: "lv.append(%slv.pop())"%self.python_operator
 BitwiseNot.python_operator = '~',
 ArithmeticInvert.python_operator = '-'
-LogicNot.python_operator = '!'
+LogicNot.python_operator = 'not '
 
 BinaryOperator.to_python = lambda self: "swap = lv.pop(); lv.append(lv.pop() %s swap)"%self.python_operator
 Add.python_operator = '+'

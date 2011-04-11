@@ -55,11 +55,14 @@ class ASM(object):
         else:
             yield repr(self.data)
 
-        debug = False
+        debug = True
         for pos, c in self.code:
             prefix = "%s = "%self.jumplabels[pos] if pos in self.jumplabels else ""
             code = repr(c)
-            linenumber = "    # %d"%pos if debug else ""
+            if debug:
+                linenumber = "    # %04x (%s)"%(pos, " ".join("%02x"%x for x in c.to_bin()) if not hasattr(c, 'address') else " address=%s"%c.address)
+            else:
+                linenumber = ""
             yield prefix + code + linenumber
 
     def read_asm(self, data):
