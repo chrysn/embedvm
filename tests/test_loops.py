@@ -48,3 +48,7 @@ def main():
             uf(7, True, i)
         else:
             uf(7, False, i)
+
+if __name__ == "__main__":
+    main()
+    print "Main function returned => Terminating."

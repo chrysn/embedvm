@@ -34,6 +34,8 @@ for fn; do
 	if [ $# -gt 1 ]; then
 		echo; echo "=== $fn ==="
 	fi
+        v python $fn > $fn.out-native
+
 	v ../tools/py2bin $fn || exit 1
 	start=$( grep ' main$' ${fn}.sym | cut -f1 -d' ' ) 
 	if $verbose; then
@@ -41,6 +43,14 @@ for fn; do
 	else
 		v ../vmsrc/evmdemo $evmopt ${fn}.bin $start > ${fn}.out
 		if [ -f ${fn%.py}.expect ]; then
+			if cmp ${fn%.evm}.out-native ${fn%.py}.expect; then
+				echo "OK: Native passed $fn."
+				(( count_ok++ ))
+			else
+				echo "ERROR: Native output of $fn was not as expected!"
+				(( count_error++ ))
+			fi
+
 			if cmp ${fn%.evm}.out ${fn%.py}.expect; then
 				echo "OK: Passed $fn."
 				(( count_ok++ ))

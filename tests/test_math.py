@@ -24,3 +24,7 @@ def main():
     uf(1, 0x7fff / negthousand)
 
     uf(1, fibonacci(6))
+
+if __name__ == "__main__":
+    main()
+    print "Main function returned => Terminating."

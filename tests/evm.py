@@ -8,6 +8,6 @@ def userfunc(which, *args):
 
     sys.stdout.write("Called user function %d with %d args:"%(which, len(args)))
 
-    print "".join(" %s"%x for x in args)
+    print "".join(" %d"%x for x in args)
 
     return sum(args) ^ which
