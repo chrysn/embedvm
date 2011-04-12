@@ -26,6 +26,17 @@ class Label(bytecode.ByteCodeCommand):
 class VariableLengthCommand(bytecode.ByteCodeCommand):
     """Command that has different length versions depending on the exact
     payload"""
+    def _get_real_command(self):
+        """Return a proper bytecode.ByteCodeCommand, use current .nargs for
+        determining the length requirements."""
+        raise NotImplementedError
+
+    def to_bin(self):
+        real = self._get_real_command() # if the worst case was wrong, this will raise an error e.g. from assert_signexted
+        ret = real.to_bin()
+        if len(ret) != self.nargs + 1:
+            raise Exception("_get_real_command didn't respect nargs")
+        return ret
 
 class Jump(VariableLengthCommand):
     """Placeholder object for a jump whose destination is not yet known"""
@@ -33,6 +44,19 @@ class Jump(VariableLengthCommand):
         self.address = address # typically, this is a Label
     def __repr__(self):
         return '<%s %s>'%(type(self).__name__, self.address)
+
+    def prebake(self):
+        if -128 <= self.reladdr < 128:
+            self.nargs = 1
+        else:
+            self.nargs = 2
+
+    def _get_real_command(self):
+        if self.nargs == 1:
+            return self.shortcommand(reladdr=self.reladdr)
+        else:
+            return self.longcommand(reladdr=self.reladdr)
+
     nargs = 2 # for worst case calculations
 
     shortcommand = bytecode.JumpRel1
@@ -67,7 +91,6 @@ class Globals(object):
     def setattr(self, attr, value):
         self.assigned.append(value)
         self.named[attr] = value
-        print "stored", value, "at", self.pos
         value.pos = self.pos
         self.pos += value.bytes
 
@@ -101,7 +124,6 @@ class Globals(object):
                 self.length = len(self.init)
 
             self.bytes = self.length * self.bytes_per_item
-            print "calculating byte usage of %s as %d = %d * %d"%(self, self.bytes, self.length, self.bytes_per_item)
 
             return self
 
@@ -203,6 +225,9 @@ class Function(object):
         self.body = body
         self.code = []
         self.locals = []
+
+    def __repr__(self):
+        return "<%s \"%s\", %d instructions>"%(type(self).__name__, self.name, len(self.code))
 
     def _locals_from_statement(self, statement):
         if hasattr(statement, "targets"):
@@ -599,50 +624,44 @@ class Py2Bin(object):
         else:
             code_start = 0
 
-        labels = {}
+        labels = {} # object -> commandlist index
         commandlist = []
-        worstcasepositions = []
-        worstcasepos = code_start
 
         for fobj in self.funcs.values():
             labels[fobj] = len(commandlist)
             for command in fobj.code:
                 if isinstance(command, Label):
-                    labels[command] = len(commandlist)
-                else:
-                    commandlist.append(command)
-                    worstcasepositions.append(worstcasepos)
-                    worstcasepos += command.nargs + 1
+                    labels[command] = len(commandlist) # can stay in command list as 0 length commands
 
-        for (ln, command) in enumerate(commandlist):
-            if isinstance(command, Jump):
-                assert command.address in labels
-                worstcase_reladdr = worstcasepositions[labels[command.address]] - worstcasepositions[ln]
-                if -128 <= worstcase_reladdr < 128:
-                    command.nargs = 1
+                commandlist.append(command)
 
-        realpositions = []
-        realposition = code_start
-        for command in commandlist:
-            realpositions.append(realposition)
-            realposition += command.nargs + 1
+        positions = [] # commandlist index -> code position
+        def update_positions():
+            positions[:] = []
+            pos = code_start
+            for command in commandlist:
+                positions.append(pos)
+                pos += command.nargs + 1
 
-        for (ln, command) in enumerate(commandlist):
-            if isinstance(command, Jump):
-                currentpos = realpositions[ln]
-                reladdr = realpositions[labels[command.address]] - realpositions[ln]
-                old_nargs = command.nargs
-                if old_nargs == 1:
-                    commandlist[ln] = command.shortcommand(reladdr=reladdr)
-                else:
-                    commandlist[ln] = command.longcommand(reladdr=reladdr)
-                assert commandlist[ln].nargs == old_nargs
+            for (ln, command) in enumerate(commandlist):
+                if isinstance(command, Jump):
+                    assert command.address in labels
+                    command.reladdr = positions[labels[command.address]] - positions[ln]
 
+        update_positions()
+        for i in range(2): # one time enhances the positions, two times only enhances corner cases
+            for command in commandlist:
+                if isinstance(command, VariableLengthCommand):
+                    command.prebake()
+
+            update_positions()
+
+        # prepare symbol table
         self.sym = {}
         for (k, v) in labels.items():
             if isinstance(k, Function):
                 # a function entry point
-                self.sym[realpositions[v]] = k.name
+                self.sym[positions[v]] = k.name
 
         for command in commandlist:
             final_code.extend(command.to_bin())
