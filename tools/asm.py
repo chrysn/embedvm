@@ -156,7 +156,7 @@ class ASM(object):
             if isinstance(c, bytecode.GlobalAccess) and c.address is not None:
                 for (t, (s, sa)) in type2set.items():
                     if isinstance(c, t):
-                        if c.m in (3, 4):
+                        if c.popoffset:
                             sa.add(c.address)
                         else:
                             s.add(c.address)

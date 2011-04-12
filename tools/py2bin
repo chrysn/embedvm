@@ -12,15 +12,22 @@ def raising_int(n):
         raise ValueError("Unsupported type for integer")
     return n
 
-class Label(object):
+class Label(bytecode.ByteCodeCommand):
     """Like a byte code, but results in null-length bytecode and can be used
     for jump calculations"""
     def __init__(self, descr):
         self.descr = descr # for debugging purposes
     def __repr__(self):
         return '<%s %s>'%(type(self).__name__, self.descr)
+    def to_bin(self):
+        return []
+    nargs = -1
 
-class Jump(object):
+class VariableLengthCommand(bytecode.ByteCodeCommand):
+    """Command that has different length versions depending on the exact
+    payload"""
+
+class Jump(VariableLengthCommand):
     """Placeholder object for a jump whose destination is not yet known"""
     def __init__(self, address):
         self.address = address # typically, this is a Label
@@ -101,9 +108,9 @@ class Globals(object):
     class SingleView(View):
         length = 1
         def assign_pop(self):
-            return self.store_code(address=self.pos, m=0 if self.pos < 256 else 1)
+            return self.store_code(address=self.pos, nargs=1 if self.pos < 256 else 2, popoffset=False)
         def value_push(self):
-            return self.load_code(address=self.pos, m=0 if self.pos < 256 else 1)
+            return self.load_code(address=self.pos, nargs=1 if self.pos < 256 else 2, popoffset=False)
         def assign_pop_indexpop(self):
             raise Exception("Can not index a scalar")
         def value_push_indexpop(self):
@@ -115,9 +122,9 @@ class Globals(object):
         def value_push(self):
             raise Exception("Can not push the array on the stack")
         def assign_pop_indexpop(self):
-            return self.store_code(address=self.pos, m=3 if self.pos < 256 else 4)
+            return self.store_code(address=self.pos, nargs=1 if self.pos < 256 else 2, popoffset=True)
         def value_push_indexpop(self):
-            return self.load_code(address=self.pos, m=3 if self.pos < 256 else 4)
+            return self.load_code(address=self.pos, nargs=1 if self.pos < 256 else 2, popoffset=True)
 
     class SingleView8s(SingleView):
         bytes_per_item = 1

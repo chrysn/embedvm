@@ -49,7 +49,7 @@ JumpIfNotCommand.to_python = lambda self: "if not lv.pop():\n    goto .%s"%self.
 CallUserFunction.to_python = lambda self: "lv.append(userfunc(%d, *(lv.pop() for x in range(lv.pop()))))"%self.funcid
 
 def _GA_to_python(self):
-    if self.m < 2:
+    if not self.popoffset:
         accessor = "gv.%s"%self.address
     else:
         if isinstance(self, GlobalStore):

@@ -30,7 +30,7 @@ class ByteCodeCommand(object):
         return (command & cls.commandmask) == cls.command
 
     def __repr__(self):
-        return '%s(%s)'%(type(self).__name__, ', '.join('%s=%s'%(k, v) for (k, v) in vars(self).items() if k != 'nargs')) # variable length commands like the GlobalAccess store nargs in the object and have a maximum nargs in the class; omitting that from output as it has to be obvious from the rest anyway
+        return '%s(%s)'%(type(self).__name__, ', '.join('%s=%s'%(k, v) for (k, v) in vars(self).items()))
 
     def to_bin(self):
         assert self.commandmask == 0xff
@@ -236,17 +236,18 @@ class GlobalAccess(ByteCodeCommand):
     commandmask = 0xf8
     nargs = 2 # or 1 or 0, will be overwritten by instances which know their exact mode
 
-    M2NARGS = {0: 1, 1: 2, 2: 0, 3: 1, 4: 2}
+    M2NARGSPOP = {0: (1, False), 1: (2, False), 2: (0, True), 3: (1, True), 4: (2, True)}
+    NARGSPOP2M = dict((v, k) for (k, v) in M2NARGSPOP.items())
 
-    def __init__(self, command=None, arg0=None, arg1=None, m=None, address=None):
+    def __init__(self, command=None, arg0=None, arg1=None, nargs=None, popoffset=None, address=None):
         if command is None:
-            self.m = int(m)
-            self.nargs = self.M2NARGS[self.m]
-            self.address = None if self.m == 2 else address
+            self.popoffset = bool(popoffset)
+            self.nargs = nargs
+            self.address = None if nargs == 0 else address
         else:
-            self.m = command & 0x07
+            m = command & 0x07
 
-            self.nargs = self.M2NARGS[self.m]
+            self.nargs, self.popoffset = self.M2NARGSPOP[m]
 
             if self.nargs == 0:
                 self.address = None
@@ -255,7 +256,6 @@ class GlobalAccess(ByteCodeCommand):
             elif self.nargs == 2:
                 self.address = (arg0 << 8) | arg1
 
-        assert self.m in xrange(5)
         if self.nargs == 0:
             assert self.address == None
         elif self.nargs == 1:
@@ -269,11 +269,11 @@ class GlobalAccess(ByteCodeCommand):
 
     def to_bin(self):
         if self.nargs == 0:
-            return [self.command | (self.m & 0x07)]
+            return [self.command | self.NARGSPOP2M[self.nargs, self.popoffset]]
         elif self.nargs == 1:
-            return [self.command | (self.m & 0x07), self.address]
+            return [self.command | self.NARGSPOP2M[self.nargs, self.popoffset], self.address]
         elif self.nargs == 2:
-            return [self.command | (self.m & 0x07), self.address>>8, self.address%256]
+            return [self.command | self.NARGSPOP2M[self.nargs, self.popoffset], self.address>>8, self.address%256]
 
 class GlobalLoad(GlobalAccess): pass
 class GlobalStore(GlobalAccess): pass
@@ -352,6 +352,7 @@ def test():
         if command is None:
             continue
         r = repr(command)
+        print r
         assert repr(eval(r)) == r
         assert repr(interpret(command.to_bin(), 0)) == r
 
