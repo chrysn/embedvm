@@ -16,25 +16,13 @@
 #  OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 #
 
-CC = gcc
-CFLAGS += -MD -Wall -Wextra -Os -ggdb
-
-all: evmcomp
-
-evmcomp: evmcomp.o codegen.o output.o insn.o parser.tab.o lex.yy.o
-
-parser.tab.c parser.tab.h: parser.y
-	bison -d -r all parser.y
-
-lex.yy.c: lexer.l
-	flex lexer.l
-
-install: evmcomp
-	install -TD evmcomp /usr/local/bin/evmcomp
-
+all:
+	$(MAKE) -C tools all
+	$(MAKE) -C vmsrc all
+install:
+	$(MAKE) -C tools install
+	$(MAKE) -C vmsrc install
 clean:
-	rm -f evmcomp *.d *.o core
-	rm -f parser.tab.c parser.tab.h parser.output lex.yy.c
-
--include *.d
+	$(MAKE) -C tools clean
+	$(MAKE) -C vmsrc clean
 

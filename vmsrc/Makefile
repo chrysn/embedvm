@@ -19,7 +19,14 @@
 CC = gcc
 CFLAGS += -MD -Wall -Wextra -Os -ggdb
 
+all: evmdemo
+
 evmdemo: evmdemo.o embedvm.o
+
+install: evmdemo
+	install -TD evmdemo /usr/local/bin/evmdemo
+	install -TD -m0644 embedvm.c /usr/local/share/embedvm/embedvm.c
+	install -TD -m0644 embedvm.h /usr/local/share/embedvm/embedvm.h
 
 clean:
 	rm -f evmdemo evmdemo.core *.d *.o core
