@@ -2,7 +2,8 @@
 
 import sys
 import ast
-from embedvm.asm import joining
+from embedvm import asm
+from embedvm.util import joining
 from embedvm import bytecode
 
 deduplicate = lambda iterable: reduce(lambda a, b: a if b in a else a+[b], iterable, [])
@@ -20,6 +21,8 @@ class Globals(object):
         self.named = {} # name -> view object
         self.pos = 0
 
+    length = property(lambda self: self.pos)
+
     def getattr(self, attr):
         if attr in self.accessor_types:
             return self.accessor_types[attr](self)
@@ -35,10 +38,9 @@ class Globals(object):
             raise Exception("Following forced memory alignment not yet supported")
         self.pos += value.bytes
 
-    def get_initial_data(self):
+    def to_binary(self, startpos):
         data = [0] * self.pos
 
-        # TBD: global initial values
         for view in self.assigned:
             view.store_initial_value(data)
 
@@ -170,23 +172,26 @@ class Function(object):
             raise Exception("Non-simple arguments not supported")
 
         self.body = body
-        self.code = []
+        self.code = asm.FreeCodeBlock()
         self.locals = []
 
-    def __repr__(self):
-        return "<%s \"%s\", %d instructions>"%(type(self).__name__, self.name, len(self.code))
+        self.entry_label = bytecode.Label("function start", export=self.name)
+        self.code.append(self.entry_label)
 
-    def _locals_from_statement(self, statement):
-        if hasattr(statement, "targets"):
+    def __repr__(self):
+        return "<%s \"%s\", %d instructions>"%(type(self).__name__, self.name, self.code.length)
+
+    def _gather_locals_from_statement(self, statement):
+        if hasattr(statement, "targets"): # assignments
             for t in statement.targets:
                 if isinstance(t, ast.Name):
                     self.locals.append(t.id)
-        if hasattr(statement, "target"):
+        if hasattr(statement, "target"): # for loop
             if isinstance(statement.target, ast.Name):
                 self.locals.append(statement.target.id)
-        if hasattr(statement, "body"):
+        if hasattr(statement, "body"): # blocks
             for s in statement.body:
-                self._locals_from_statement(s)
+                self._gather_locals_from_statement(s)
 
     def _resolve_attribute(self, e, context):
         if not isinstance(e.value, ast.Name):
@@ -203,9 +208,9 @@ class Function(object):
             elif e.id in self.args:
                 self.code.append(bytecode.PushLocal(-1-self.args.index(e.id)))
             elif e.id == 'True':
-                self.code.append(bytecode.PushImmediate(val=1))
+                self.code.append(bytecode.PushConstantV(value=1))
             elif e.id == 'False':
-                self.code.append(bytecode.PushImmediate(val=0))
+                self.code.append(bytecode.PushConstantV(value=0))
             else:
                 raise Exception("Can not access non-local name %r"%e.id)
         elif isinstance(e, ast.Attribute):
@@ -266,9 +271,7 @@ class Function(object):
                     self.code.append(bytecode.LogicAnd())
                 is_first = False
         elif isinstance(e, ast.Num):
-            if not isinstance(e.n, int):
-                raise Exception("Unsupported number type %s"%type(e.n))
-            self.code.append(bytecode.PushConstant(e.n))
+            self.code.append(bytecode.PushConstantV(raising_int(e.n)))
         elif isinstance(e, ast.Call):
             # either it's a userfunc or a normal function
             if not isinstance(e.func, ast.Name):
@@ -294,10 +297,10 @@ class Function(object):
                     raise Exception("Too many arguments")
                 for i in range(len(f.args) - len(e.args)):
                     # push defaults while needed
-                    self.code.append(bytecode.PushConstant(f.defaults[-1-i]))
+                    self.code.append(bytecode.PushConstantV(f.defaults[-1-i]))
                 for a in e.args[::-1]:
                     self._push_expression(a, context)
-                self.code.append(Call(f))
+                self.code.append(bytecode.CallV(f.entry_label.get_ref()))
                 if len(f.args) > 0:
                     self.code.append(bytecode.PopMany(len(f.args)-1)) # how practical, it keeps the top which is just the return value
             else:
@@ -359,10 +362,10 @@ class Function(object):
                 self._push_expression(stop, context)
                 self._push_expression(start, context)
 
-                loop_compare = Label("comp")
-                loop_regular_end = Label("regend")
-                loop_break_end = Label("breakend")
-                loop_continue = Label("continue")
+                loop_compare = bytecode.Label("comp")
+                loop_regular_end = bytecode.Label("regend")
+                loop_break_end = bytecode.Label("breakend")
+                loop_continue = bytecode.Label("continue")
                 self.code.append(loop_compare)
 
                 self.code.append(bytecode.Bury(k=0)) # get a copy of start + i*step
@@ -374,7 +377,7 @@ class Function(object):
                     self.code.append(bytecode.CompareGE())
                 else:
                     self.code.append(bytecode.CompareLE())
-                self.code.append(JumpIf(address=loop_regular_end))
+                self.code.append(bytecode.JumpVIf(address=loop_regular_end.get_ref()))
 
                 # store current iteration counter
                 self.code.append(bytecode.Bury(k=0))
@@ -388,7 +391,7 @@ class Function(object):
                 self.code.append(loop_continue)
                 self._push_expression(step, context)
                 self.code.append(bytecode.Add())
-                self.code.append(Jump(address=loop_compare))
+                self.code.append(bytecode.JumpV(address=loop_compare.get_ref()))
 
                 self.code.append(loop_regular_end)
 
@@ -404,14 +407,14 @@ class Function(object):
                 raise Exception("Variable step not supported")
 
         elif isinstance(s, ast.If):
-            if_end = Label("endif")
-            if_else = Label("else")
+            if_end = bytecode.Label("endif")
+            if_else = bytecode.Label("else")
             self._push_expression(s.test, context)
-            self.code.append(JumpIfNot(address=if_else))
+            self.code.append(bytecode.JumpVIfNot(address=if_else.get_ref()))
             for iterated_s in s.body:
                 self._parse(iterated_s, context, break_jump, continue_jump)
             if s.orelse:
-                self.code.append(Jump(address=if_end))
+                self.code.append(bytecode.JumpV(address=if_end.get_ref()))
                 self.code.append(if_else)
                 for iterated_s in s.orelse:
                     self._parse(iterated_s, context, break_jump, continue_jump)
@@ -432,18 +435,18 @@ class Function(object):
 
         elif isinstance(s, ast.While):
             # body, test, orelse
-            while_start = Label("whilestart")
-            while_else = Label("whileelse")
-            while_end = Label("whileend")
+            while_start = bytecode.Label("whilestart")
+            while_else = bytecode.Label("whileelse")
+            while_end = bytecode.Label("whileend")
 
             self.code.append(while_start)
 
             self._push_expression(s.test, context)
-            self.code.append(JumpIfNot(address=while_else))
+            self.code.append(bytecode.JumpVIfNot(address=while_else.get_ref()))
 
             for iterated_s in s.body:
                 self._parse(iterated_s, context, while_end, while_start)
-            self.code.append(Jump(while_start))
+            self.code.append(bytecode.JumpV(while_start.get_ref()))
             self.code.append(while_else)
             for iterated_s in s.orelse:
                 self._parse(iterated_s, context, break_jump, continue_jump) # TBD: check standard python semantics
@@ -460,13 +463,13 @@ class Function(object):
             if continue_jump is None:
                 raise Exception("Continue where there is nothing to continue")
 
-            self.code.append(Jump(continue_jump))
+            self.code.append(bytecode.JumpV(continue_jump.get_ref()))
 
         elif isinstance(s, ast.Break):
             if break_jump is None:
                 raise Exception("Break where there is nothing to break")
 
-            self.code.append(Jump(break_jump))
+            self.code.append(bytecode.JumpV(break_jump.get_ref()))
 
         else:
             raise Exception("Unknown statement %r"%s)
@@ -474,7 +477,7 @@ class Function(object):
     def parse(self, context):
         # analyze local variables
         for statement in self.body:
-            self._locals_from_statement(statement)
+            self._gather_locals_from_statement(statement)
         self.locals = deduplicate(self.locals)
 
         if self.locals:
@@ -483,12 +486,13 @@ class Function(object):
         for statement in self.body:
             self._parse(statement, context)
 
-        if not isinstance(self.code[-1], bytecode.Return):
+        if not isinstance(self.code.code[-1], bytecode.Return):
             self.code.append(bytecode.Return0())
 
-
-class Py2Bin(object):
+class PythonProgram(asm.ASM):
     def __init__(self):
+        super(PythonProgram, self).__init__()
+
         self.globals = {}
         self.funcs = {}
 
@@ -516,7 +520,9 @@ class Py2Bin(object):
                     for t in statement.targets:
                         if not isinstance(t, ast.Name):
                             raise Exception("Can't assign globals to anything than a name.")
-                        self.globals[t.id] = Globals()
+                        g = Globals()
+                        self.blocks.append(g)
+                        self.globals[t.id] = g
 
                 elif isinstance(statement.value.func, ast.Attribute):
                     if not isinstance(statement.value.func.value, ast.Name):
@@ -539,7 +545,9 @@ class Py2Bin(object):
                 raise Exception("Global variables can only be declared using the Globals() mechanisms for type strictness reasons.")
 
         elif isinstance(statement, ast.FunctionDef):
-            self.funcs[statement.name] = Function(statement.name, statement.args, statement.body)
+            f = Function(statement.name, statement.args, statement.body)
+            self.funcs[statement.name] = f
+            self.blocks.append(f.code)
 
         elif isinstance(statement, ast.If):
             if statement.orelse or not isinstance(statement.test, ast.Compare) or len(statement.test.ops) != 1 or not isinstance(statement.test.ops[0], ast.Eq) or not isinstance(statement.test.left, ast.Name) or statement.test.left.id != '__name__' or len(statement.test.comparators) != 1 or not isinstance(statement.test.comparators[0], ast.Str) or statement.test.comparators[0].s != '__main__':
@@ -548,7 +556,7 @@ class Py2Bin(object):
         else:
             raise Exception("Unknown top level statement %r"%statement)
 
-    def feed(self, data):
+    def read_python(self, data):
         t = ast.parse(data)
 
         for statement in t.body:
@@ -557,41 +565,30 @@ class Py2Bin(object):
         for fn, f in self.funcs.items():
             f.parse(self)
 
-    def get_output(self):
-        final_code = []
+        # merge function blocks so calls can be solved in a relative (short address) way
+        bigblock = asm.FreeCodeBlock()
+        for f in self.funcs.values():
+            self.blocks.remove(f.code)
+            bigblock.code.extend(f.code.code)
 
-        globalobjects = [go for go in self.globals.values() if isinstance(go, Globals)]
+        self.blocks.append(bigblock)
 
-        if globalobjects:
-            if len(globalobjects) != 1:
-                raise Exception("Needing at maximum one global object")
-            (go, ) = globalobjects
-            final_code.extend(go.get_initial_data())
-            code_start = go.pos
-        else:
-            code_start = 0
-
-        labels = {} # object -> commandlist index
-        commandlist = []
-
-        for fobj in self.funcs.values():
-            labels[fobj] = len(commandlist)
-            for command in fobj.code:
-                if isinstance(command, Label):
-                    labels[command] = len(commandlist) # can stay in command list as 0 length commands
-
-                commandlist.append(command)
-
-        return "".join(chr(x) for x in final_code)
+    def get_symbols(self):
+        sym = {}
+        for b in self.blocks:
+            if hasattr(b, 'sym'):
+                sym.update(b.sym)
+        return sym
 
 def main():
-    pb = Py2Bin()
-    pb.feed(open(sys.argv[1]).read())
-    converted = pb.get_output()
+    pb = PythonProgram()
+    pb.read_python(open(sys.argv[1]).read())
+    pb.fix_all()
+    converted = pb.to_binary()
     with open(sys.argv[1] + '.bin', 'w') as f:
-        f.write(converted)
+        f.write("".join(chr(x) for x in converted))
     with open(sys.argv[1] + '.sym', 'w') as f:
-        f.write("".join("%04x %s\n"%(v, k) for (v, k) in pb.sym.items()))
+        f.write("".join("%04x %s\n"%(v, k) for (k, v) in pb.get_symbols().items()))
 
 if __name__ == "__main__":
     main()

@@ -44,6 +44,9 @@ class FreeCodeBlock(CodeBlock):
             code = repr(c)
             yield code
 
+    def append(self, command):
+        self.code.append(command)
+
     def fixed_code(self, code_start):
         positions = [] # self.code index -> code position
         def update_positions():
@@ -69,6 +72,8 @@ class FreeCodeBlock(CodeBlock):
         fixed = FixedPositionCodeBlock()
         for (pos, c) in zip(positions, self.code):
             if isinstance(c, bytecode.Label):
+                if c.export:
+                    fixed.sym[c.export] = pos
                 continue
             assert pos not in fixed.code
             fixed.code[pos] = c
@@ -78,6 +83,12 @@ class FreeCodeBlock(CodeBlock):
 class FixedPositionCodeBlock(CodeBlock):
     def __init__(self):
         self.code = {} # position -> bytecode
+        self.sym = {} # export label -> position
+
+    @property
+    def length(self):
+        maxindex = max(self.code)
+        return maxindex + self.code[maxindex].length
 
     def read_binary(self, data, firstpos):
         pos = firstpos
@@ -222,4 +233,6 @@ class ASM(object):
 
 
     def fix_all(self):
-        self.blocks = [b.fixed_code(sum(bb.length for bb in self.blocks[:i])) if isinstance(b, FreeCodeBlock) else b for (i, b) in enumerate(self.blocks)]
+        for i in range(len(self.blocks)):
+            if isinstance(self.blocks[i], FreeCodeBlock):
+                self.blocks[i] = self.blocks[i].fixed_code(sum(bb.length for bb in self.blocks[:i]))

@@ -36,7 +36,7 @@ for fn; do
 	fi
         v python $fn > $fn.out-native
 
-	v ../tools/py2bin $fn || exit 1
+	v ../pysrc/py2bin $fn || exit 1
 	start=$( grep ' main$' ${fn}.sym | cut -f1 -d' ' ) 
 	if $verbose; then
 		v ../vmsrc/evmdemo $evmopt ${fn}.bin $start
