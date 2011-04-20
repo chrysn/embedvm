@@ -8,8 +8,8 @@ def main():
     a = asm.ASM()
     data = open(sys.argv[1]).read()
     a.read_asm(data)
-    print sorted(a.jumplabels.keys())
-    converted = "".join(map(chr, a.write_binary()))
+    a.fix_all()
+    converted = "".join(map(chr, a.to_binary()))
     with open(sys.argv[2], 'w') as f:
         f.write(converted)
 

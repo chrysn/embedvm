@@ -8,7 +8,8 @@ def main():
     a = asm.ASM()
     data = map(ord, open(sys.argv[1]).read())
     a.read_binary(data, int(sys.argv[2]))
-    converted = a.write_asm()
+    a.unfix_all()
+    converted = a.to_asm()
     with open(sys.argv[3], 'w') as f:
         f.write(converted)
 

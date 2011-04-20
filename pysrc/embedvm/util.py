@@ -14,3 +14,8 @@ def signext(val, mask):
         val |= ~mask
     return val
 
+flipped = lambda d: dict((v, k) for (k, v) in d.items())
+
+# decorators
+joining = lambda f: lambda self: "\n".join(f(self))
+adding = lambda f: lambda *args, **kwargs: sum(f(*args, **kwargs), [])

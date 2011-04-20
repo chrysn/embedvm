@@ -1,3 +1,5 @@
+import copy
+
 from util import signext, assert_signexted
 
 class UnknownCommand(Exception):
@@ -28,7 +30,7 @@ class ByteCodeCommand(object):
 
     def __repr__(self):
         # generic initialize-by-__dict__
-        return '%s(%s)'%(type(self).__name__, ', '.join('%s=%s'%(k, v) for (k, v) in vars(self).items()))
+        return '%s(%s)'%(type(self).__name__, ', '.join('%s=%r'%(k, v) for (k, v) in vars(self).items()))
 
     ############ defaults for trivial cases ############
 
@@ -44,6 +46,29 @@ class ByteCodeCommand(object):
         assert self.commandmask == 0xff
         assert self.nargs == 0
         pass
+
+    def generalize(self, own_position):
+        """Return a copy of self, possibly modified to a more general
+        command that has the same semantics but not necessarily a
+        defined length"""
+        return copy.copy(self)
+
+class VariableLengthCommand(ByteCodeCommand):
+    """Command that has different length versions depending on the exact
+    payload"""
+    def _get_real_command(self):
+        """Return a proper ByteCodeCommand, use current .nargs for determining
+        the length requirements."""
+        raise NotImplementedError
+
+    nargs = None
+
+    def to_bin(self):
+        real = self._get_real_command() # if the worst case was wrong, this will raise an error e.g. from assert_signexted
+        ret = real.to_bin()
+        if len(ret) != self.length:
+            raise Exception("_get_real_command didn't respect nargs")
+        return ret
 
 class SFACommand(ByteCodeCommand):
     def __init__(self, sfa):
@@ -91,20 +116,34 @@ class LogicAnd(BinaryOperator): command = 0x8a
 class LogicOr(BinaryOperator): command = 0x8b
 
 class PushConstant(ByteCodeCommand):
-    pass
-'''
-def PushConstant(n):
-    if -4 <= n < 4:
-        return PushImmediate(val=n)
-    elif -128 <= n < 127:
-        return PushS8(value=n)
-    elif 0 <= n < 256:
-        return PushU8(value=n)
-    elif 0 <= n < 0x10000:
-        return Push16(value=n)
-    else:
-        raise ValueError("Integer overflow")
-'''
+    def generalize(self, own_position):
+        return PushConstantV(value=self.value)
+
+class PushConstantV(VariableLengthCommand):
+    def __init__(self, value):
+        self.value = value
+    nargs = 2 # maximum
+
+    def _get_real_command(self):
+        if self.nargs == 2:
+            return Push16(value=self.value)
+        elif self.nargs == 1:
+            if self.value < 128:
+                return PushS8(value=self.value)
+            else:
+                return PushU8(value=self.value)
+        else:
+            return PushImmediate(value=self.value)
+
+    def prebake(self):
+        if -4 <= self.value < 4:
+            self.nargs = 0
+        elif -128 <= self.value < 256:
+            self.nargs = 1
+        elif 0 <= self.value < 0x10000:
+            self.nargs = 2
+        else:
+            raise ValueError("Integer overflow")
 
 class PushImmediate(PushConstant):
     command = 0x90
@@ -183,11 +222,31 @@ class DropValue(ByteCodeCommand): command = 0x9d
 class CallAddress(ByteCodeCommand): command = 0x9e
 class JumpToAddress(ByteCodeCommand): command = 0x9f
 
-class AddressCommand(ByteCodeCommand):
+class VariableAddressCommand(VariableLengthCommand):
+    def __init__(self, address):
+        self.address = address
+    nargs = 2 # worst case
+
+    def prebake(self):
+        if -128 <= self.reladdr < 128:
+            self.nargs = 1
+        else:
+            self.nargs = 2
+
+    def _get_real_command(self):
+        if self.nargs == 1:
+            return self.shortcommand(reladdr=self.reladdr)
+        else:
+            return self.longcommand(reladdr=self.reladdr)
+
+class RelativeAddressCommand(ByteCodeCommand):
     def __init__(self, reladdr):
         self.reladdr = reladdr
 
-class AddressCommand1(AddressCommand):
+    def generalize(self, own_position):
+        return self.generalized(address=own_position + self.reladdr)
+
+class RelativeAddressCommand1(RelativeAddressCommand):
     nargs = 1
     def set_from_data(self, data, offset):
         self.reladdr = signext(data[offset+1], 0xff)
@@ -199,7 +258,7 @@ class AddressCommand1(AddressCommand):
         self._check()
         return [self.command, self.reladdr % 256]
 
-class AddressCommand2(AddressCommand):
+class RelativeAddressCommand2(RelativeAddressCommand):
     nargs = 2
     def set_from_data(self, data, offset):
         self.reladdr = signext((data[offset+1]<<8)+data[offset+2], 0xffff)
@@ -211,32 +270,52 @@ class AddressCommand2(AddressCommand):
         self._check()
         return [self.command, ((self.reladdr & 0xffff) >> 8)%256, (self.reladdr & 0xff)%256]
 
-class JumpCommand(AddressCommand):
+class JumpCommand(object):
     pass
 class UnconditionalJumpCommand(JumpCommand):
     pass
-class JumpRel1(UnconditionalJumpCommand, AddressCommand1):
-    command = 0xa0
-class JumpRel2(UnconditionalJumpCommand, AddressCommand2):
-    command = 0xa1
-class CallCommand(AddressCommand):
+class JumpV(UnconditionalJumpCommand, VariableAddressCommand):
     pass
-class CallRel1(CallCommand, AddressCommand1):
+class JumpRel1(UnconditionalJumpCommand, RelativeAddressCommand1):
+    command = 0xa0
+    generalized = JumpV
+class JumpRel2(UnconditionalJumpCommand, RelativeAddressCommand2):
+    command = 0xa1
+    generalized = JumpV
+JumpV.shortcommand, JumpV.longcommand = JumpRel1, JumpRel2
+class CallCommand(object):
+    pass
+class CallV(CallCommand, VariableAddressCommand):
+    pass
+class CallRel1(CallCommand, RelativeAddressCommand1):
     command = 0xa2
-class CallRel2(CallCommand, AddressCommand2):
+    generalized = CallV
+class CallRel2(CallCommand, RelativeAddressCommand2):
     command = 0xa3
+    generalized = CallV
+CallV.shortcommand, CallV.longcommand = CallRel1, CallRel2
 class JumpIfCommand(JumpCommand):
     pass
-class JumpRel1If(JumpIfCommand, AddressCommand1):
+class JumpVIf(JumpIfCommand, VariableAddressCommand):
+    pass
+class JumpRel1If(JumpIfCommand, RelativeAddressCommand1):
     command = 0xa4
-class JumpRel2If(JumpIfCommand, AddressCommand2):
+    generalized = JumpVIf
+class JumpRel2If(JumpIfCommand, RelativeAddressCommand2):
     command = 0xa5
+    generalized = JumpVIf
+JumpVIf.shortcommand, JumpVIf.longcommand = JumpRel1If, JumpRel2If
 class JumpIfNotCommand(JumpCommand):
     pass
-class JumpRel1IfNot(JumpIfNotCommand, AddressCommand1):
+class JumpVIfNot(JumpIfNotCommand, VariableAddressCommand):
+    pass
+class JumpRel1IfNot(JumpIfNotCommand, RelativeAddressCommand1):
     command = 0xa6
-class JumpRel2IfNot(JumpIfNotCommand, AddressCommand2):
+    generalized = JumpVIfNot
+class JumpRel2IfNot(JumpIfNotCommand, RelativeAddressCommand2):
     command = 0xa7
+    generalized = JumpVIfNot
+JumpVIfNot.shortcommand, JumpVIfNot.longcommand = JumpRel1IfNot, JumpRel2IfNot
 
 class CompareLT(BinaryOperator): command = 0xa8
 class CompareLE(BinaryOperator): command = 0xa9
@@ -369,6 +448,35 @@ class PushZeros(StackShoveling):
 
 class PopMany(StackShoveling):
     command = 0xf8
+
+class Label(ByteCodeCommand):
+    """Like a byte code, but results in null-length bytecode and can be used
+    for jump calculations"""
+    __instancecounter = 0
+    def __init__(self, descr=None, id=None):
+        if descr is not None:
+            self.descr = descr # for debugging purposes
+        type(self).__instancecounter += 1
+        self.id = id or "label%d"%self.__instancecounter
+
+    def to_bin(self):
+        return []
+
+    nargs = None
+    length = 0
+
+    def get_ref(self):
+        return self.LabelRef(self)
+
+    class LabelRef(object):
+        """Reference to a label"""
+
+        def __init__(self, ref):
+            self.ref = ref
+
+        def __repr__(self):
+            # this is not how they are constructed, but they can't be constructed directly anyway
+            return "LabelRef(%r)"%self.ref.id
 
 def interpret(commandbuffer, index):
     command = commandbuffer[index]

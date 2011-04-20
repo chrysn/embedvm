@@ -1,87 +1,186 @@
 import ast
 from . import bytecode
+from util import flipped, joining, adding
 
-joining = lambda f: lambda self: "\n".join(f(self))
-adding = lambda f: lambda self: sum(f(self), [])
-flipped = lambda d: dict((v, k) for (k, v) in d.items())
+class UnresolvedReference(object):
+    def __init__(self, id):
+        self.id = id
+
+    def resolve(self, labels):
+        for l in labels:
+            if l.id == self.id:
+                self.__class__ = bytecode.Label.LabelRef
+                self.ref = l
+                del self.id
+                break
+        else:
+            raise Exception("Unresolved label")
+
+class DataBlock(object):
+    def read_binary(self, data):
+        self.data = data
+
+    def read_ast(self, data):
+        self.data = ast.literal_eval(data)
+
+    length = property(lambda self: len(self.data))
+
+    def to_asm(self):
+        return repr(self.data)
+
+    def to_binary(self, startpos):
+        return self.data
+
+class CodeBlock(object):
+    pass
+
+class FreeCodeBlock(CodeBlock):
+    def __init__(self):
+        self.code = [] # bytecode objects
+
+    @joining
+    def to_asm(self):
+        for c in self.code:
+            code = repr(c)
+            yield code
+
+    def fixed_code(self, code_start):
+        positions = [] # self.code index -> code position
+        def update_positions():
+            positions[:] = []
+            pos = code_start
+            for command in self.code:
+                positions.append(pos)
+                pos += command.length
+
+            for (ln, command) in enumerate(self.code):
+                if isinstance(command, bytecode.VariableAddressCommand) and isinstance(command.address, bytecode.Label.LabelRef):
+                    assert command.address.ref in self.code, "label not found: %r"%command.address
+                    command.reladdr = positions[self.code.index(command.address.ref)] - positions[ln]
+
+        update_positions()
+        for i in range(2): # one time enhances the positions, two times only enhances corner cases
+            for command in self.code:
+                if isinstance(command, bytecode.VariableLengthCommand):
+                    command.prebake()
+
+            update_positions()
+
+        fixed = FixedPositionCodeBlock()
+        for (pos, c) in zip(positions, self.code):
+            if isinstance(c, bytecode.Label):
+                continue
+            assert pos not in fixed.code
+            fixed.code[pos] = c
+
+        return fixed
+
+class FixedPositionCodeBlock(CodeBlock):
+    def __init__(self):
+        self.code = {} # position -> bytecode
+
+    def read_binary(self, data, firstpos):
+        pos = firstpos
+        while pos < len(data):
+            command = bytecode.interpret(data, pos-firstpos)
+            self.code[pos] = command
+            pos += command.length
+
+    @joining
+    def to_asm(self):
+        for (lineno, c) in sorted(self.code.items()):
+            yield "%r # %04x"%(c, lineno)
+
+    def unfixed_code(self):
+        labels = {} # position -> label object
+        generalized = {} # like self.code
+
+        for lineno, command in sorted(self.code.items()):
+            g = command.generalize(lineno)
+            if isinstance(g, bytecode.VariableAddressCommand):
+                g.address = labels.setdefault(g.address, bytecode.Label()).get_ref()
+            generalized[lineno] = g
+
+        newcode = FreeCodeBlock()
+        for lineno, command in sorted(generalized.items()):
+            if lineno in labels:
+                newcode.code.append(labels[lineno])
+            newcode.code.append(command)
+
+        return newcode
+
+    @adding
+    def to_binary(self, startpos):
+        lastpos = startpos
+        for (pos, c) in sorted(self.code.items()):
+            assert lastpos == pos
+            yield c.to_bin()
+            lastpos += c.length
 
 class ASM(object):
     def __init__(self):
-        self.data = []
-        self.code = [] # (lineno, command)
-        self.jumplabels = {} # address -> label
-        self.code_points_called = set()
-        self.code_points_jumped_to = set()
-        self.unconditional_jumps = [] # (from, to)
-        self.conditional_jumps = [] # (from, to)
-        self.calls = [] # (from, to)
-        self.datalabels = {} # address -> label
-        self.accessed_as_s8 = set()
-        self.accessed_as_u8 = set()
-        self.accessed_as_16 = set()
-        self.accessed_as_s8_array = set()
-        self.accessed_as_u8_array = set()
-        self.accessed_as_16_array = set()
+        self.blocks = []
 
-    def read_binary(self, data, code_offset):
-        if self.data or self.code:
-            raise ValueError("Can't feed an already fed Bin2Asm")
-        self.data = data[:code_offset]
+    def read_binary(self, data, code_offset, generalize=False):
+        datablock = DataBlock()
+        datablock.read_binary(data[:code_offset])
 
-        pos = code_offset
-        while pos < len(data):
-            command = bytecode.interpret(data, pos)
-            self.code.append((pos, command))
-            if isinstance(command, bytecode.AddressCommand):
-                absaddr = pos + command.reladdr
-                command.address = self.jumplabels.setdefault(absaddr, ("label_%d" if isinstance(command, bytecode.JumpCommand) else "function_%x")%absaddr)
-                del command.reladdr
-            elif isinstance(command, bytecode.GlobalAccess):
-                if command.address is not None:
-                    command.address = self.datalabels.setdefault(command.address, "data_%x"%command.address)
-            pos += 1 + command.nargs
+        self.blocks.append(datablock)
 
-        self._analyze_flow()
-        self._analyze_globals()
+        codeblock = FixedPositionCodeBlock()
+        codeblock.read_binary(data[code_offset:], code_offset)
+
+        self.blocks.append(codeblock)
 
     @joining
-    def write_asm(self):
-        if self.datalabels:
-            if 0 not in self.datalabels:
-                yield repr(self.data[:min(self.datalabels)])
-            for (start, end) in zip(sorted(self.datalabels)[:-1], sorted(self.datalabels)[1:]):
-                yield "%s = %r"%(self.datalabels[start], self.data[start:end])
-            yield "%s = %r"%(self.datalabels[max(self.datalabels)], self.data[max(self.datalabels):])
-        else:
-            yield repr(self.data)
-
-        debug = True
-        for pos, c in self.code:
-            prefix = "%s = "%self.jumplabels[pos] if pos in self.jumplabels else ""
-            code = repr(c)
-            if debug:
-                linenumber = "    # %04x (%s)"%(pos, " ".join("%02x"%x for x in c.to_bin()) if not hasattr(c, 'address') else " address=%s"%c.address)
-            else:
-                linenumber = ""
-            yield prefix + code + linenumber
+    def to_asm(self):
+        for b in self.blocks:
+            yield b.to_asm()
 
     def read_asm(self, data):
-        if self.data or self.code:
-            raise ValueError("Can't feed an already fed Bin2Asm")
-
-        lines = [ast.parse(l) for l in data.split('\n')]
+        nodes = ast.parse(data).body
         pos = 0
 
-        for l in lines:
-            if not l.body:
-                continue # empty line
-            (node, ) = l.body
+        def finish_codebuffer():
+            if not codebuffer:
+                return
+
+            if pos is None:
+                codeblock = FreeCodeBlock()
+                for (i, c) in codebuffer:
+                    codeblock.code.append(c)
+            else:
+                codeblock = FixedPositionCodeBlock()
+                for (i, c) in codebuffer:
+                    assert i not in codeblock.code
+                    codeblock.code[i] = c
+
+            self.blocks.append(codeblock)
+
+            codebuffer[:] = []
+            while unrefs:
+                unrefs.pop().resolve(labels)
+            labels[:] = []
+
+        codebuffer = [] # (pos, code)
+        labels = []
+        unrefs = []
+        for node in nodes:
             (target, ) = getattr(node, 'targets', [None])
             if target is not None:
                 target = target.id
             value = node.value
 
-            if isinstance(value, ast.Call):
+            if not isinstance(value, ast.Call):
+                finish_codebuffer()
+                # assume it's data
+                assert pos is not None, "Can not have global data segment after free code"
+                datablock = DataBlock()
+                datablock.read_ast(value)
+                self.blocks.append(datablock)
+                pos += datablock.length
+
+            else: # it's a call -- this is code.
                 assert value.kwargs is None and value.starargs is None
 
                 commandclass = getattr(bytecode, value.func.id)
@@ -89,54 +188,49 @@ class ASM(object):
 
                 keywords = dict((k.arg, k.value) for k in value.keywords) if value.keywords else {}
 
-                later_replace_address = None
                 for (k, v) in keywords.items():
-                    if issubclass(commandclass, bytecode.GlobalAccess) and k == "address" and isinstance(v, ast.Name):
-                        keywords["address"] = flipped(self.datalabels)[v.id]
-                    elif issubclass(commandclass, bytecode.AddressCommand) and k == "address" and isinstance(v, ast.Name):
-                        keywords["reladdr"] = 42 # can't tell yet, will replace command later, faking any address for the moment
-                        later_replace_address = keywords.pop("address").id
+                    if isinstance(v, ast.Call) and isinstance(v.func, ast.Name) and v.func.id == 'LabelRef':
+                        ref = UnresolvedReference(ast.literal_eval(v.args[0]))
+                        unrefs.append(ref)
+                        keywords[k] = ref
                     else:
                         keywords[k] = ast.literal_eval(v)
 
                 command = commandclass(**keywords)
-                if later_replace_address:
-                    def build_replacement(pos=pos, commandclass=commandclass, keywords=keywords, labels=self.jumplabels, address=later_replace_address):
-                        keywords["reladdr"] = flipped(labels)[address] - pos
-                        return commandclass(**keywords)
-                    command._replace_me = build_replacement
 
-                self.code.append((pos, command))
-                if target is not None:
-                    self.jumplabels[pos] = target
+                if isinstance(command, bytecode.Label):
+                    labels.append(command)
 
-                pos += 1 + command.nargs
+                codebuffer.append((pos, command))
 
-            else: # not a call but data
-                assert pos == len(self.data), "Can't have data after first command"
-                self.datalabels[pos] = target
-                value = ast.literal_eval(value)
-                self.data.extend(value)
-                pos += len(value)
-
-        # print "finished at", pos
-
-        for (i, (pos, c)) in enumerate(self.code):
-            if hasattr(c, '_replace_me'):
-                self.code[i] = (pos, c._replace_me())
+                if pos is None or isinstance(command, bytecode.VariableLengthCommand):
+                    pos = None
+                else:
+                    pos += command.length
+        finish_codebuffer()
 
         self._analyze_flow()
 
     @adding
-    def write_binary(self):
-        yield self.data
-        for l, c in self.code:
-            yield c.to_bin()
+    def to_binary(self, startpos=0):
+        pos = startpos
+        for b in self.blocks:
+            data = b.to_binary(pos)
+            pos += len(data)
+            yield data
+
+    def unfix_all(self):
+        self.blocks = [b.unfixed_code() if isinstance(b, FixedPositionCodeBlock) else b for b in self.blocks]
+
+
+    def fix_all(self):
+        self.blocks = [b.fixed_code(sum(bb.length for bb in self.blocks[:i])) if isinstance(b, FreeCodeBlock) else b for (i, b) in enumerate(self.blocks)]
 
     def _analyze_flow(self):
+        '''
         labeljumps = flipped(self.jumplabels)
         for (l, c) in self.code:
-            if isinstance(c, bytecode.JumpCommand):
+            if isinstance(c, bytecode.JumpCommand) and hasattr(c, 'address'):
                 self.code_points_jumped_to.add(labeljumps[c.address])
                 if isinstance(c, bytecode.JumpIfCommand) or isinstance(c, bytecode.JumpIfNotCommand):
                     self.conditional_jumps.append([l, labeljumps[c.address]])
@@ -145,6 +239,7 @@ class ASM(object):
             elif isinstance(c, bytecode.CallCommand):
                 self.code_points_called.add(labeljumps[c.address])
                 self.calls.append([l, labeljumps[c.address]])
+        '''
 
     def _analyze_globals(self):
         type2set = {
