@@ -209,8 +209,6 @@ class ASM(object):
                     pos += command.length
         finish_codebuffer()
 
-        self._analyze_flow()
-
     @adding
     def to_binary(self, startpos=0):
         pos = startpos
@@ -225,33 +223,3 @@ class ASM(object):
 
     def fix_all(self):
         self.blocks = [b.fixed_code(sum(bb.length for bb in self.blocks[:i])) if isinstance(b, FreeCodeBlock) else b for (i, b) in enumerate(self.blocks)]
-
-    def _analyze_flow(self):
-        '''
-        labeljumps = flipped(self.jumplabels)
-        for (l, c) in self.code:
-            if isinstance(c, bytecode.JumpCommand) and hasattr(c, 'address'):
-                self.code_points_jumped_to.add(labeljumps[c.address])
-                if isinstance(c, bytecode.JumpIfCommand) or isinstance(c, bytecode.JumpIfNotCommand):
-                    self.conditional_jumps.append([l, labeljumps[c.address]])
-                else:
-                    self.unconditional_jumps.append([l, labeljumps[c.address]])
-            elif isinstance(c, bytecode.CallCommand):
-                self.code_points_called.add(labeljumps[c.address])
-                self.calls.append([l, labeljumps[c.address]])
-        '''
-
-    def _analyze_globals(self):
-        type2set = {
-                bytecode.GlobalU8: (self.accessed_as_u8, self.accessed_as_u8_array),
-                bytecode.GlobalS8: (self.accessed_as_s8, self.accessed_as_s8_array),
-                bytecode.Global16: (self.accessed_as_16, self.accessed_as_16_array),
-                }
-        for (l, c) in self.code:
-            if isinstance(c, bytecode.GlobalAccess) and c.address is not None:
-                for (t, (s, sa)) in type2set.items():
-                    if isinstance(c, t):
-                        if c.popoffset:
-                            sa.add(c.address)
-                        else:
-                            s.add(c.address)
