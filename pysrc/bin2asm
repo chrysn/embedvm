@@ -2,7 +2,7 @@
 
 import sys
 
-import asm
+from embedvm import asm
 
 def main():
     a = asm.ASM()

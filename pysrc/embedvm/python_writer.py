@@ -1,4 +1,4 @@
-from bytecode import *
+from .bytecode import *
 
 PushLocal.to_python = lambda self: ("lv.append(arguments[%d])" if self.sfa < 0 else "lv.append(lv[%d])")%self.sfa
 PopLocal.to_python = lambda self: ("arguments[%d] = lv.pop()" if self.sfa < 0 else "lv[%d] = lv.pop()")%self.sfa

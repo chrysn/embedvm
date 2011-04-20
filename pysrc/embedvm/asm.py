@@ -1,5 +1,5 @@
 import ast
-import bytecode
+from . import bytecode
 
 joining = lambda f: lambda self: "\n".join(f(self))
 adding = lambda f: lambda self: sum(f(self), [])

@@ -2,8 +2,8 @@
 
 import sys
 import ast
-from asm import joining
-import bytecode
+from embedvm.asm import joining
+from embedvm import bytecode
 
 deduplicate = lambda iterable: reduce(lambda a, b: a if b in a else a+[b], iterable, [])
 
@@ -92,6 +92,8 @@ class Globals(object):
         self.assigned.append(value)
         self.named[attr] = value
         value.pos = self.pos
+        if value.specified_pos is not None and value.specified_pos != value.pos:
+            raise Exception("Following forced memory alignment not yet supported")
         self.pos += value.bytes
 
     def get_initial_data(self):
@@ -108,8 +110,14 @@ class Globals(object):
             self.gv = gv
 
         def call(self, args, starargs, keywords, kwargs):
-            if args or starargs or kwargs:
+            if starargs or kwargs:
                 raise Exception("Can't handle those arguments")
+            if len(args) not in (0, 1) or len(args) == 1 and not isinstance(args[0], ast.Num):
+                raise Exception("Can't handle those arguments")
+            if args:
+                self.specified_pos = raising_int(args[0].n)
+            else:
+                self.specified_pos = None
             keywords_converted = {}
             for k in keywords:
                 keywords_converted[k.arg] = ast.literal_eval(k.value)
