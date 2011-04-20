@@ -1,52 +1,62 @@
-def assert_signexted(val, mask):
-    """Assert that val fits in the range you can get when signext'ing with the
-    given mask"""
-    assert bin(mask).rstrip('1') == '0b'
-    max = mask >> 1
-    min = (mask & ~max) | ~mask
-    assert min <= val <= max
+from util import signext, assert_signexted
 
-def signext(val, mask):
-    """Use the part of val which is covered by mask (required to be all zeros
-    followed by all ones) as a signed value (two's complement)"""
-    val = val & mask
-    if val & ~(mask>>1):
-        val |= ~mask
-    return val
+class UnknownCommand(Exception):
+    """A byte sequence was attempted to parse that has no byte code command associated"""
 
 class ByteCodeCommand(object):
     # defaul values
     nargs = 0
+    length = property(lambda self: self.nargs + 1)
     commandmask = 0xff
 
-    def __init__(self, command=None):
-        pass
+    @classmethod
+    def from_bin(cls, data, offset):
+        assert cls.check_match(data[offset])
+        instance = ByteCodeCommand()
+        instance.__class__ = cls
+        instance.set_from_data(data, offset)
+
+        instance._check()
+        return instance
 
     @classmethod
     def check_match(cls, command):
         if not hasattr(cls, 'command'):
-            # happens for command groups
+            # happens for command groups like BinaryOperator
             return False
         return (command & cls.commandmask) == cls.command
 
     def __repr__(self):
+        # generic initialize-by-__dict__
         return '%s(%s)'%(type(self).__name__, ', '.join('%s=%s'%(k, v) for (k, v) in vars(self).items()))
+
+    ############ defaults for trivial cases ############
 
     def to_bin(self):
         assert self.commandmask == 0xff
         assert self.nargs == 0
         return [self.command]
 
-class SFACommand(ByteCodeCommand):
-    def __init__(self, command=None, sfa=None):
-        if command is None:
-            self.sfa = int(sfa)
-        else:
-            self.sfa = signext(command, 0x3f)
+    def _check(self):
+        pass
 
+    def set_from_data(self, data, offset):
+        assert self.commandmask == 0xff
+        assert self.nargs == 0
+        pass
+
+class SFACommand(ByteCodeCommand):
+    def __init__(self, sfa):
+        self.sfa = sfa
+
+    def set_from_data(self, data, offset):
+        self.sfa = signext(data[offset], 0x3f)
+
+    def _check(self):
         assert_signexted(self.sfa, 0x3f)
 
     def to_bin(self):
+        self._check()
         return [self.command | (self.sfa & 0x3f)]
 
 class PushLocal(SFACommand):
@@ -80,6 +90,9 @@ class BitwiseXor(BinaryOperator): command = 0x89
 class LogicAnd(BinaryOperator): command = 0x8a
 class LogicOr(BinaryOperator): command = 0x8b
 
+class PushConstant(ByteCodeCommand):
+    pass
+'''
 def PushConstant(n):
     if -4 <= n < 4:
         return PushImmediate(val=n)
@@ -91,59 +104,74 @@ def PushConstant(n):
         return Push16(value=n)
     else:
         raise ValueError("Integer overflow")
+'''
 
-class PushImmediate(ByteCodeCommand):
+class PushImmediate(PushConstant):
     command = 0x90
     commandmask = 0xf8
 
-    def __init__(self, command=None, val=None):
-        if command is None:
-            self.val = val
-        else:
-            self.val = signext(command, 0x07)
+    def __init__(self, value):
+        self.value = value
 
-        assert_signexted(self.val, 0x07)
+    def set_from_data(self, data, offset):
+        self.value = signext(data[offset], 0x07)
+
+    def _check(self):
+        assert_signexted(self.value, 0x07)
 
     def to_bin(self):
-        return [self.command | (self.val & 0x07)]
+        self._check()
+        return [self.command | (self.value & 0x07)]
 
-class PushData(ByteCodeCommand):
+class PushData(PushConstant):
     pass
+
 class PushU8(PushData):
     command = 0x98
     nargs = 1
-    def __init__(self, command=None, arg0=None, value=None):
-        if command is None:
-            self.value = int(value)
-        else:
-            self.value = arg0
+    def __init__(self, value=None):
+        self.value = value
+
+    def set_from_data(self, data, offset):
+        self.value = data[offset+1]
+
+    def _check(self):
         assert self.value in xrange(256)
 
     def to_bin(self):
+        self._check()
         return [self.command, self.value]
+
 class PushS8(PushData):
     command = 0x99
     nargs = 1
-    def __init__(self, command=None, arg0=None, value=None):
-        if command is None:
-            self.value = int(value)
-        else:
-            self.value = signext(arg0, 0xff)
+    def __init__(self, value):
+        self.value = value
+
+    def set_from_data(self, data, offset):
+        self.value = signext(data[offset+1], 0xff)
+
+    def _check(self):
         assert_signexted(self.value, 0xff)
 
     def to_bin(self):
+        self._check()
         return [self.command, self.value%256]
+
 class Push16(PushData):
     command = 0x9a
     nargs = 2
-    def __init__(self, command=None, arg0=None, arg1=None, value=None):
-        if command is None:
-            self.value = int(value)
-        else:
-            self.value = signext((arg0<<8)+arg1, 0xffff)
+    def __init__(self, value):
+        self.value = value
+
+    def set_from_data(self, data, offset):
+        self.value = signext((data[offset+1]<<8)+data[offset+2], 0xffff)
+
+    def _check(self):
         assert_signexted(self.value, 0xffff)
 
     def to_bin(self):
+        self._check()
         return [self.command, ((self.value & 0xffff) >> 8)%256, (self.value & 0xff)%256]
 
 class Return(ByteCodeCommand): command = 0x9b
@@ -156,54 +184,59 @@ class CallAddress(ByteCodeCommand): command = 0x9e
 class JumpToAddress(ByteCodeCommand): command = 0x9f
 
 class AddressCommand(ByteCodeCommand):
-    def __init__(self, command=None, arg0=None, arg1=None, reladdr=None):
-        argmask = 0xffff if self.nargs == 2 else 0xff
-        if not command:
-            self.reladdr = int(reladdr)
-        else:
-            self.reladdr = signext((arg0<<8)+arg1 if self.nargs == 2 else arg0, argmask)
-        assert_signexted(self.reladdr, argmask)
+    def __init__(self, reladdr):
+        self.reladdr = reladdr
+
+class AddressCommand1(AddressCommand):
+    nargs = 1
+    def set_from_data(self, data, offset):
+        self.reladdr = signext(data[offset+1], 0xff)
+
+    def _check(self):
+        assert_signexted(self.reladdr, 0xff)
 
     def to_bin(self):
-        if self.nargs == 2:
-            return [self.command, ((self.reladdr & 0xffff) >> 8)%256, (self.reladdr & 0xff)%256]
-        else:
-            return [self.command, self.reladdr % 256]
+        self._check()
+        return [self.command, self.reladdr % 256]
+
+class AddressCommand2(AddressCommand):
+    nargs = 2
+    def set_from_data(self, data, offset):
+        self.reladdr = signext((data[offset+1]<<8)+data[offset+2], 0xffff)
+
+    def _check(self):
+        assert_signexted(self.reladdr, 0xffff)
+
+    def to_bin(self):
+        self._check()
+        return [self.command, ((self.reladdr & 0xffff) >> 8)%256, (self.reladdr & 0xff)%256]
 
 class JumpCommand(AddressCommand):
     pass
 class UnconditionalJumpCommand(JumpCommand):
     pass
-class JumpRel1(UnconditionalJumpCommand):
+class JumpRel1(UnconditionalJumpCommand, AddressCommand1):
     command = 0xa0
-    nargs = 1
-class JumpRel2(UnconditionalJumpCommand):
+class JumpRel2(UnconditionalJumpCommand, AddressCommand2):
     command = 0xa1
-    nargs = 2
 class CallCommand(AddressCommand):
     pass
-class CallRel1(CallCommand):
+class CallRel1(CallCommand, AddressCommand1):
     command = 0xa2
-    nargs = 1
-class CallRel2(CallCommand):
+class CallRel2(CallCommand, AddressCommand2):
     command = 0xa3
-    nargs = 2
 class JumpIfCommand(JumpCommand):
     pass
-class JumpRel1If(JumpIfCommand):
+class JumpRel1If(JumpIfCommand, AddressCommand1):
     command = 0xa4
-    nargs = 1
-class JumpRel2If(JumpIfCommand):
+class JumpRel2If(JumpIfCommand, AddressCommand2):
     command = 0xa5
-    nargs = 2
 class JumpIfNotCommand(JumpCommand):
     pass
-class JumpRel1IfNot(JumpIfNotCommand):
+class JumpRel1IfNot(JumpIfNotCommand, AddressCommand1):
     command = 0xa6
-    nargs = 1
-class JumpRel2IfNot(JumpIfNotCommand):
+class JumpRel2IfNot(JumpIfNotCommand, AddressCommand2):
     command = 0xa7
-    nargs = 2
 
 class CompareLT(BinaryOperator): command = 0xa8
 class CompareLE(BinaryOperator): command = 0xa9
@@ -221,15 +254,17 @@ class CallUserFunction(ByteCodeCommand):
     command = 0xb0
     commandmask = 0xf0
 
-    def __init__(self, command=None, funcid=None):
-        if command is None:
-            self.funcid = int(funcid)
-        else:
-            self.funcid = command & 0x0f
+    def __init__(self, funcid):
+        self.funcid = funcid
 
+    def set_from_data(self, data, offset):
+        self.funcid = data[offset] & 0x0f
+
+    def _check(self):
         assert self.funcid in xrange(16)
 
     def to_bin(self):
+        self._check()
         return [self.command | (self.funcid & 0x0f)]
 
 class GlobalAccess(ByteCodeCommand):
@@ -239,25 +274,27 @@ class GlobalAccess(ByteCodeCommand):
     M2NARGSPOP = {0: (1, False), 1: (2, False), 2: (0, True), 3: (1, True), 4: (2, True)}
     NARGSPOP2M = dict((v, k) for (k, v) in M2NARGSPOP.items())
 
-    def __init__(self, command=None, arg0=None, arg1=None, nargs=None, popoffset=None, address=None):
-        if command is None:
-            self.popoffset = bool(popoffset)
-            self.nargs = nargs
-            self.address = None if nargs == 0 else address
-        else:
-            m = command & 0x07
+    def __init__(self, nargs, popoffset, address=None):
+        self.popoffset = popoffset
+        self.nargs = nargs
+        self.address = address # may be None if nargs == 0, in which case popoffset has to be true
 
-            self.nargs, self.popoffset = self.M2NARGSPOP[m]
+    def set_from_data(self, data, offset):
+        m = data[offset] & 0x07
 
-            if self.nargs == 0:
-                self.address = None
-            elif self.nargs == 1:
-                self.address = arg0
-            elif self.nargs == 2:
-                self.address = (arg0 << 8) | arg1
+        self.nargs, self.popoffset = self.M2NARGSPOP[m]
 
         if self.nargs == 0:
+            self.address = None
+        elif self.nargs == 1:
+            self.address = data[offset+1]
+        elif self.nargs == 2:
+            self.address = (data[offset+1] << 8) | data[offset+2]
+
+    def _check(self):
+        if self.nargs == 0:
             assert self.address == None
+            assert self.popoffset
         elif self.nargs == 1:
             assert self.address in xrange(1<<8)
         elif self.nargs == 2:
@@ -268,6 +305,7 @@ class GlobalAccess(ByteCodeCommand):
         return super(GlobalAccess, cls).check_match(command) and command & 0x7 in (0, 1, 2, 3, 4)
 
     def to_bin(self):
+        self._check()
         if self.nargs == 0:
             return [self.command | self.NARGSPOP2M[self.nargs, self.popoffset]]
         elif self.nargs == 1:
@@ -290,12 +328,13 @@ class GlobalStore16(GlobalStore, Global16): command = 0xe8
 class StackAccess(ByteCodeCommand):
     commandmask = 0xc7
 
-    def __init__(self, command=None, k=None):
-        if command is None:
-            self.k = int(k)
-        else:
-            self.k = (command & 0x38) >> 3
+    def __init__(self, k):
+        self.k = k
 
+    def set_from_data(self, data, offset):
+        self.k = (data[offset] & 0x38) >> 3
+
+    def _check(self):
         assert self.k in xrange(6)
 
     @classmethod
@@ -303,6 +342,7 @@ class StackAccess(ByteCodeCommand):
         return super(StackAccess, cls).check_match(command) and command & 0x7 in (5, 6) and ((command & 0x38) >> 3) in xrange(6)
 
     def to_bin(self):
+        self._check()
         return [self.command | (self.k & 0x07) << 3]
 
 class Bury(StackAccess): command = 0xc5
@@ -311,15 +351,17 @@ class Dig(StackAccess): command = 0xc6
 class StackShoveling(ByteCodeCommand):
     commandmask = 0xf8
 
-    def __init__(self, command=None, n=None):
-        if command is None:
-            self.n = int(n)
-        else:
-            self.n = command & 0x07
+    def __init__(self, n):
+        self.n = n
 
+    def set_from_data(self, data, offset):
+        self.n = data[offset] & 0x07
+
+    def _check(self):
         assert self.n in range(8)
 
     def to_bin(self):
+        self._check()
         return [self.command | (self.n & 0x07)]
 
 class PushZeros(StackShoveling):
@@ -336,25 +378,28 @@ def interpret(commandbuffer, index):
             if c.check_match(command):
                 candidates.append(c)
     if not candidates:
-        print "unknown command: %x"%command # FIXME
-        return None
+        raise UnknownCommand(command)
     if len(candidates) > 1:
         raise Exception("Multiple matches for command %x"%command)
 
     (commandclass, ) = candidates
 
-    return commandclass(command, *commandbuffer[index+1:index+1+commandclass.nargs])
+    return commandclass.from_bin(commandbuffer, index)
 
 def test():
     for c in range(256):
         commandbuffer = [c, 233, 253]
-        command = interpret(commandbuffer, 0)
-        if command is None:
+        try:
+            command = interpret(commandbuffer, 0)
+        except UnknownCommand:
+            print "Command %02x is unknown"%c
             continue
         r = repr(command)
         print r
         assert repr(eval(r)) == r
-        assert repr(interpret(command.to_bin(), 0)) == r
+        b = command.to_bin()
+        assert repr(interpret(b, 0)) == r
+        assert b == commandbuffer[:command.length]
 
 if __name__ == "__main__":
     test()
