@@ -1,0 +1,25 @@
+#!/usr/bin/make -f
+# -*- makefile -*-
+
+# Uncomment this to turn on verbose mode.
+#export DH_VERBOSE=1
+
+%:
+	dh --with python2 $@ 
+
+override_dh_auto_configure: makefilepatch
+	dh_auto_configure
+
+override_dh_auto_install:
+	dh_auto_install
+	cd pysrc && ./setup.py install --install-layout=deb --prefix=../debian/embedvm/usr/
+
+override_dh_auto_clean: makefileunpatch
+	dh_auto_clean
+	cd pysrc && ./setup.py clean
+
+makefilepatch: Makefile tools/Makefile vmsrc/Makefile
+	sed -i 's!/usr/local!$${DESTDIR}/usr!g' $^
+
+makefileunpatch: Makefile tools/Makefile vmsrc/Makefile
+	sed -i 's!$${DESTDIR}/usr!/usr/local!g' $^
