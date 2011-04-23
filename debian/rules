@@ -16,7 +16,7 @@ override_dh_auto_install:
 
 override_dh_auto_clean: makefileunpatch
 	dh_auto_clean
-	cd pysrc && ./setup.py clean
+	cd pysrc && ./setup.py clean -a
 
 makefilepatch: Makefile tools/Makefile vmsrc/Makefile
 	sed -i 's!/usr/local!$${DESTDIR}/usr!g' $^

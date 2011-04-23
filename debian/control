@@ -1,15 +1,26 @@
 Source: embedvm
-Section: unknown
+Section: electronics
 Priority: extra
 Maintainer: Christian M. Amsüss <chrysn@fsfe.org>
 Build-Depends: debhelper (>= 7.0.50~), python
 Standards-Version: 3.9.1
-Homepage: <insert the upstream URL, if relevant>
+Homepage: http://www.clifford.at/embedvm/
 #Vcs-Git: git://git.debian.org/collab-maint/embedvm.git
 #Vcs-Browser: http://git.debian.org/?p=collab-maint/embedvm.git;a=summary
 
 Package: embedvm
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}, ${python:Depends}
-Description: <insert up to 60 chars description>
- <insert long description, indented with spaces>
+Description: small embeddable virtual machine for microcontrollers
+ EmbedVM is a virtual machine aimed at AVR microcontrollers (but portable to
+ others). It comes with a C-like language frontend and a minimalistic Python
+ compiler.
+ .
+ The VM architecture simulates a 16bit CPU which can access 64kB of memory,
+ which contains the program code (bytecode), global data and the stack (for
+ functions with up to 32 local variables and 32 arguments). Interaction with
+ the platform is possible through callback ("user") functions or memory mapped
+ hardware.
+ .
+ The machine itself takes about 3kB of program memory on AVR microcontrollers
+ and can execute 75k instructions per second on a 16MHz clocked ATMega.
