@@ -1,0 +1,15 @@
+Source: embedvm
+Section: unknown
+Priority: extra
+Maintainer: Christian M. Amsüss <chrysn@fsfe.org>
+Build-Depends: debhelper (>= 7.0.50~), python
+Standards-Version: 3.9.1
+Homepage: <insert the upstream URL, if relevant>
+#Vcs-Git: git://git.debian.org/collab-maint/embedvm.git
+#Vcs-Browser: http://git.debian.org/?p=collab-maint/embedvm.git;a=summary
+
+Package: embedvm
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, ${python:Depends}
+Description: <insert up to 60 chars description>
+ <insert long description, indented with spaces>
