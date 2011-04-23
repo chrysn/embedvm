@@ -1,5 +1,5 @@
-embedvm (0-20110421git84d4ef-1) unstable; urgency=low
+embedvm (0-20110423gitc642a56-1) unstable; urgency=low
 
-  * Initial release (Closes: #nnnn)  <nnnn is the bug number of your ITP>
+  * Initial packaging
 
- -- Christian M. Amsüss <chrysn@fsfe.org>  Thu, 21 Apr 2011 02:08:09 +0200
+ -- Christian M. Amsüss <chrysn@fsfe.org>  Sat, 23 Apr 2011 23:40:20 +0200
