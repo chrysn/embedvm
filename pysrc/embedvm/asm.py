@@ -92,7 +92,7 @@ class FixedPositionCodeBlock(CodeBlock):
 
     def read_binary(self, data, firstpos):
         pos = firstpos
-        while pos < len(data):
+        while pos - firstpos < len(data):
             command = bytecode.interpret(data, pos-firstpos)
             self.code[pos] = command
             pos += command.length
