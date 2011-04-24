@@ -4,6 +4,7 @@ from .python import CodeObject, raising_int, UnboundSetter
 from .asm import DataBlock
 from collections import namedtuple
 import ast
+from math import ceil
 
 class Importable(CodeObject):
     """All objects that are supposed to be imported into a EVM Python program
@@ -55,6 +56,33 @@ class _UserfuncWrapper(Importable):
             context.code.append(bytecode.CallUserFunction(which))
 def UserfuncWrapper(which=None):
     return lambda func: _UserfuncWrapper(which, func)
+
+class _C_Division(Importable):
+    """When you need Python to behave like C with respect to divisions, write
+    c_division(a, b) instead of a/b. C's behavior with respect to negative
+    values of b will be used, as it is used in the VM."""
+    def __call__(self, a, b):
+        if a > 0 and b < 0:
+            return -(a/(-b))
+        elif a < 0 and b < 0:
+            return a / b
+        elif a < 0 and b > 0:
+            return -((-a)/b)
+        else:
+            return a / b
+    def call(self, context, args, keywords, starargs, kwargs):
+        if keywords or starargs or kwargs or len(args) != 2:
+            raise Exception("c_division requires exactly two arguments.")
+        return self.Pushable(args)
+    class Pushable(Importable):
+        def __init__(self, args):
+            self.a, self.b = args
+
+        def push_value(self, context):
+            context.append_push(self.a)
+            context.append_push(self.b)
+            context.code.append(bytecode.Div())
+c_division = _C_Division()
 
 class Globals(list, Importable):
     """Enhanced list of uint8 values that supports the access modes needed for

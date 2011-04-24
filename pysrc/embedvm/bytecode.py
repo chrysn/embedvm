@@ -138,9 +138,9 @@ class PushConstantV(VariableLengthCommand):
     def prebake(self):
         if -4 <= self.value < 4:
             self.nargs = 0
-        elif -128 <= self.value < 256:
+        elif -128 <= self.value < 256: # will either be signed or unsigned
             self.nargs = 1
-        elif 0 <= self.value < 0x10000:
+        elif -0x8000 <= self.value < 0x10000: # will accept both negative signed limit and positive unsigned, as machine size integers work as both for the VM, and using positive or negative sign helps showing what is meant
             self.nargs = 2
         else:
             raise ValueError("Integer overflow")
