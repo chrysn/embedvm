@@ -7,4 +7,4 @@ for x in test_*.py; do
 	rm -f $x.bin $x.sym $x.out $x.out-native $x.asm $x.asm-fix
 done
 rm -f evmdemo.core
-rm -f testsuite.pyc
+rm -f testsuite.pyc testsuite_extended.pyc
