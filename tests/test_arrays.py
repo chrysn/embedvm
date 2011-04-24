@@ -1,17 +1,15 @@
-from evm import userfunc, Globals
+from embedvm.runtime import Globals
+from testsuite import userfunc, end
 
 gv = Globals()
-# gv.schrott = gv.array8u(init=[0,0,0,0,0,0,0,0])
 gv.a8u = gv.array8u(init=[1, 2, 3, 4, 5])
 gv.a8s = gv.array8s(init=[-1, -2, -3, -4, -5])
 gv.a16 = gv.array16(init=[1000, 2000, 3000, 4000, 5000])
 
 def pr():
-
     for i in range(5):
         userfunc(1, gv.a8u[i], gv.a8s[i], gv.a16[i])
     userfunc(2)
-
 
 def main():
     pr()
@@ -35,4 +33,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-    print "Main function returned => Terminating."
+    end()

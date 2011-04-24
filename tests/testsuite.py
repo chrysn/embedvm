@@ -1,6 +1,7 @@
-from base_evm import Globals
+from embedvm.runtime import UserfuncWrapper, ignore
 import sys
 
+@UserfuncWrapper()
 def userfunc(which, *args):
     if which == 0:
         print "Called user function 0 => stop."
@@ -11,3 +12,7 @@ def userfunc(which, *args):
     print "".join(" %d"%x for x in args)
 
     return sum(args) ^ which
+
+@ignore
+def end():
+    print "Main function returned => Terminating."

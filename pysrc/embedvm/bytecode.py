@@ -138,9 +138,9 @@ class PushConstantV(VariableLengthCommand):
     def prebake(self):
         if -4 <= self.value < 4:
             self.nargs = 0
-        elif -128 <= self.value < 256:
+        elif -128 <= self.value < 256: # will either be signed or unsigned
             self.nargs = 1
-        elif 0 <= self.value < 0x10000:
+        elif -0x8000 <= self.value < 0x10000: # will accept both negative signed limit and positive unsigned, as machine size integers work as both for the VM, and using positive or negative sign helps showing what is meant
             self.nargs = 2
         else:
             raise ValueError("Integer overflow")
@@ -453,18 +453,21 @@ class Label(ByteCodeCommand):
     """Like a byte code, but results in null-length bytecode and can be used
     for jump calculations"""
     __instancecounter = 0
+
+    nargs = None
+    length = 0
+    export = None
+
     def __init__(self, descr=None, id=None, export=None):
         if descr is not None:
             self.descr = descr # for debugging purposes
         type(self).__instancecounter += 1
         self.id = id or "label%d"%self.__instancecounter
-        self.export = export
+        if export is not None:
+            self.export = export
 
     def to_bin(self):
         return []
-
-    nargs = None
-    length = 0
 
     def get_ref(self):
         return self.LabelRef(self)

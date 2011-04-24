@@ -17,16 +17,13 @@ class UnresolvedReference(object):
             raise Exception("Unresolved label")
 
 class DataBlock(object):
-    def read_binary(self, data):
-        self.data = data
-
     def read_ast(self, data):
         self.data = ast.literal_eval(data)
 
     length = property(lambda self: len(self.data))
 
     def to_asm(self):
-        return repr(self.data)
+        return repr(self.to_binary(0))
 
     def to_binary(self, startpos):
         return self.data
@@ -73,7 +70,7 @@ class FreeCodeBlock(CodeBlock):
         for (pos, c) in zip(positions, self.code):
             if isinstance(c, bytecode.Label):
                 if c.export:
-                    fixed.sym[c.export] = pos
+                    fixed.sym[c.export] = (pos, "code")
                 continue
             assert pos not in fixed.code
             fixed.code[pos] = c
@@ -83,24 +80,17 @@ class FreeCodeBlock(CodeBlock):
 class FixedPositionCodeBlock(CodeBlock):
     def __init__(self):
         self.code = {} # position -> bytecode
-        self.sym = {} # export label -> position
+        self.sym = {} # export label -> (position, type)
 
     @property
     def length(self):
         maxindex = max(self.code)
         return maxindex + self.code[maxindex].length
 
-    def read_binary(self, data, firstpos):
-        pos = firstpos
-        while pos < len(data):
-            command = bytecode.interpret(data, pos-firstpos)
-            self.code[pos] = command
-            pos += command.length
-
     @joining
     def to_asm(self):
         for (lineno, c) in sorted(self.code.items()):
-            yield "%r # %04x"%(c, lineno)
+            yield "%-30r# %04x"%(c, lineno)
 
     def unfixed_code(self):
         labels = {} # position -> label object
@@ -132,16 +122,42 @@ class ASM(object):
     def __init__(self):
         self.blocks = []
 
-    def read_binary(self, data, code_offset, generalize=False):
-        datablock = DataBlock()
-        datablock.read_binary(data[:code_offset])
+    def read_binary(self, data, entry_points):
+        code = {}
+        while entry_points:
+            pos = entry_points.pop()
+            while True:
+                if len(data) < pos or data[pos] is None:
+                    break # been there, parsed that
+                command = bytecode.interpret(data, pos)
+                code[pos] = command
+                data[pos:pos+command.length] = [None] * command.length
+                if isinstance(command, bytecode.RelativeAddressCommand):
+                    entry_points.append(pos + command.reladdr)
+                pos += command.length
+                if isinstance(command, bytecode.UnconditionalJumpCommand) or isinstance(command, bytecode.Return):
+                    break # no reason to parse on
 
-        self.blocks.append(datablock)
+        data_indices = [i for (i, x) in enumerate(data) if x is not None]
+        while data_indices:
+            start = data_indices[0]
+            length = 0
+            while length < len(data_indices) and data_indices[length] == start + length:
+                # there must be an easier way to do this with itertools...
+                length += 1
+            data_indices[:length] = []
+            datablock = DataBlock()
+            datablock.data = data[start:start+length]
+            self.blocks.append(datablock)
 
-        codeblock = FixedPositionCodeBlock()
-        codeblock.read_binary(data[code_offset:], code_offset)
-
-        self.blocks.append(codeblock)
+        while code:
+            next = min(code)
+            cb = FixedPositionCodeBlock()
+            while next in code:
+                command = code.pop(next)
+                cb.code[next] = command
+                next += command.length
+            self.blocks.append(cb)
 
     @joining
     def to_asm(self):

@@ -1,4 +1,5 @@
-from evm import userfunc as uf, Globals
+from embedvm.runtime import Globals, c_division
+from testsuite import userfunc as uf, end
 
 gv = Globals()
 gv.ghundret = gv.int16(init=100)
@@ -21,10 +22,12 @@ def main():
     uf(1, 1+1*2)
     uf(1, one + one * two)
     uf(1, thousand / gv.ghundret)
-    uf(1, 0x7fff / negthousand)
+    uf(1, c_division(0x7fff, negthousand))
+    uf(1, c_division(-0x7fff, thousand))
+    uf(1, c_division(-0x7fff, negthousand))
 
     uf(1, fibonacci(6))
 
 if __name__ == "__main__":
     main()
-    print "Main function returned => Terminating."
+    end()

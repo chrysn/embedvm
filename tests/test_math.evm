@@ -29,6 +29,9 @@ function main()
 	$uf1(thousand / ghundret);
 	$uf1(0x7fff / negthousand);
 
+	$uf1(-0x7fff / thousand);
+	$uf1(-0x7fff / negthousand);
+
 	$uf1(fibonacci(6));
 }
 

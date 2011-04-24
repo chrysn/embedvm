@@ -1,4 +1,4 @@
-from evm import userfunc as uf
+from testsuite import userfunc as uf, end
 
 def main():
     for i in range(5):
@@ -51,4 +51,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-    print "Main function returned => Terminating."
+    end()
