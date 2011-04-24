@@ -23,7 +23,7 @@ class DataBlock(object):
     length = property(lambda self: len(self.data))
 
     def to_asm(self):
-        return repr(self.data)
+        return repr(self.to_binary(0))
 
     def to_binary(self, startpos):
         return self.data
@@ -70,7 +70,7 @@ class FreeCodeBlock(CodeBlock):
         for (pos, c) in zip(positions, self.code):
             if isinstance(c, bytecode.Label):
                 if c.export:
-                    fixed.sym[c.export] = pos
+                    fixed.sym[c.export] = (pos, "code")
                 continue
             assert pos not in fixed.code
             fixed.code[pos] = c
@@ -80,7 +80,7 @@ class FreeCodeBlock(CodeBlock):
 class FixedPositionCodeBlock(CodeBlock):
     def __init__(self):
         self.code = {} # position -> bytecode
-        self.sym = {} # export label -> position
+        self.sym = {} # export label -> (position, type)
 
     @property
     def length(self):

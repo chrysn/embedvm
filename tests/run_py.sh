@@ -2,6 +2,7 @@
 
 verbose=false
 evmopt=""
+export PYTHONPATH=../pysrc/:.
 
 count=0
 count_ok=0
@@ -36,8 +37,8 @@ for fn; do
 	fi
         v python $fn > $fn.out-native
 
-	v ../pysrc/py2bin $fn || exit 1
-	start=$( grep ' main$' ${fn}.sym | cut -f1 -d' ' ) 
+	v ../pysrc/evm-pycomp $fn ${fn}.bin ${fn}.sym --asmfile ${fn}.asm --asmfixfile ${fn}.asm-fix || exit 1
+	start=$( grep ' main ' ${fn}.sym | cut -f1 -d' ' ) 
 	if $verbose; then
 		v ../vmsrc/evmdemo $evmopt ${fn}.bin $start
 	else

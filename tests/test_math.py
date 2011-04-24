@@ -1,4 +1,5 @@
-from evm import userfunc as uf, Globals
+from embedvm.runtime import Globals
+from testsuite import userfunc as uf, end
 
 gv = Globals()
 gv.ghundret = gv.int16(init=100)
@@ -27,4 +28,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-    print "Main function returned => Terminating."
+    end()

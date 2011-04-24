@@ -453,18 +453,21 @@ class Label(ByteCodeCommand):
     """Like a byte code, but results in null-length bytecode and can be used
     for jump calculations"""
     __instancecounter = 0
+
+    nargs = None
+    length = 0
+    export = None
+
     def __init__(self, descr=None, id=None, export=None):
         if descr is not None:
             self.descr = descr # for debugging purposes
         type(self).__instancecounter += 1
         self.id = id or "label%d"%self.__instancecounter
-        self.export = export
+        if export is not None:
+            self.export = export
 
     def to_bin(self):
         return []
-
-    nargs = None
-    length = 0
 
     def get_ref(self):
         return self.LabelRef(self)
