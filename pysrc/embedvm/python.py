@@ -415,6 +415,15 @@ class PythonProgram(asm.ASM):
             realmodule = __import__(statement.module, fromlist=[n.name for n in statement.names])
             for n in statement.names:
                 realobject = getattr(realmodule, n.name)
+
+                # these two lines were introduced for embedvm.runtime.Globals,
+                # which has two completely different implementations for
+                # behaving as a CodeObject or acting in live code execution. if
+                # a more beautiful solution is found there, this hack can be
+                # dropped
+                if hasattr(realobject, 'import_to_codeobject'):
+                    realobject = realobject.import_to_codeobject(realobject)
+
                 if not isinstance(realobject, CodeObject) and not (isinstance(realobject, type) and issubclass(realobject, CodeObject)):
                     raise Exception("Can not import %s from %s: not a embedvm.runtime.Importable"%(n.name, statement.module))
                 self.globals[n.asname or n.name] = realobject

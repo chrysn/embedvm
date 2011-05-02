@@ -84,7 +84,7 @@ class _C_Division(Importable):
             context.code.append(bytecode.Div())
 c_division = _C_Division()
 
-class Globals(list, Importable):
+class Globals(list):
     """Enhanced list of uint8 values that supports the access modes needed for
     the EVM. It also supports views on global arrays and variables.
 
@@ -182,7 +182,9 @@ class Globals(list, Importable):
             if length is not None:
                 for i in range(length):
                     self[i] = self[i] # make sure gv is long enough
-            # if neither init_value nor length are set, we are either in disassembled code or it is a null length array
+                self.length = length
+            if length is None and init_value is None:
+                raise Exception("Undespecified array")
 
         def get(self):
             return self
@@ -201,12 +203,22 @@ class Globals(list, Importable):
         __setitem__ = lambda self, index, value: self.gv.set16(self.address + 2*index, value)
 
     @classmethod
-    def call(cls, context, args, keywords, starargs, kwargs):
-        if args or keywords or starargs or kwargs:
-            raise Exception("Global object can't take any arguments")
-        gco = cls.GlobalCodeObject()
-        context.blocks.append(gco)
-        return gco
+    def import_to_codeobject(cls, self):
+        # this is a very crude hack
+        if cls is self:
+            return cls.GlobalCodeObject
+        else:
+            assert isinstance(self, cls)
+            ret = cls.GlobalCodeObject()
+            for name, view in sorted(self.__dict__['_known_view'].items(), key=lambda (k, v): v.address):
+                viewtype = getattr(ret, type(view).__name__) # luckily they use the same names
+                accessor = viewtype(ret).call(None, [ast.Num(n=view.address)], [ast.keyword('length', ast.Num(n=view.length))] if hasattr(view, 'length') else [], None, None)
+                ret.getattr(None, name).global_assign(accessor)
+            return ret
+
+    @classmethod
+    def _raise(self):
+        raise Exception("This is a live object, it can't be handled (should have be import_to_codeobject'd by now)")
 
     class GlobalCodeObject(CodeObject, DataBlock):
         def __init__(self):
@@ -215,6 +227,14 @@ class Globals(list, Importable):
             self.pos = 0
 
         length = property(lambda self: self.pos)
+
+        @classmethod
+        def call(cls, context, args, keywords, starargs, kwargs):
+            if args or keywords or starargs or kwargs:
+                raise Exception("Global object can't take any arguments")
+            gco = cls()
+            context.blocks.append(gco)
+            return gco
 
         def getattr(self, context, attr):
             if attr in self.accessor_types:
@@ -245,7 +265,7 @@ class Globals(list, Importable):
             def call(self, context, args, keywords, starargs, kwargs):
                 if starargs or kwargs:
                     raise Exception("Can't handle those arguments")
-                if len(args) not in (0, 1) or len(args) == 1 and not isinstance(args[0], Num):
+                if len(args) not in (0, 1) or len(args) == 1 and not isinstance(args[0], ast.Num):
                     raise Exception("Can't handle those arguments")
                 if args:
                     self.specified_pos = raising_int(args[0].n)
