@@ -2,6 +2,7 @@
 
 verbose=false
 evmopt=""
+export PYTHONPATH=../pysrc/:.
 
 count=0
 count_ok=0
@@ -23,7 +24,7 @@ while [[ "$1" == -* ]]; do
 done
 
 if [ $# -eq 0 ]; then
-	set -- test_*.evm
+	set -- test_*.py
 fi
 
 function v() {
@@ -34,15 +35,24 @@ for fn; do
 	if [ $# -gt 1 ]; then
 		echo; echo "=== $fn ==="
 	fi
-	v ../tools/evmcomp $fn || exit 1
-	v ../pysrc/evm-disasm ${fn%.evm}.bin || echo "WARNING: Disassembling ${fn%.evm}.bin failed." && (( count_warn++ ))
-	start=$( grep ' main ' ${fn%.evm}.sym | cut -f1 -d' ' ) 
+        v python $fn > $fn.out-native
+
+	v ../pysrc/evm-pycomp $fn ${fn}.bin ${fn}.sym --asmfile ${fn}.asm --asmfixfile ${fn}.asm-fix || exit 1
+	start=$( grep ' main ' ${fn}.sym | cut -f1 -d' ' ) 
 	if $verbose; then
-		v ../vmsrc/evmdemo $evmopt ${fn%.evm}.bin $start
+		v ../vmsrc/evmdemo $evmopt ${fn}.bin $start
 	else
-		v ../vmsrc/evmdemo $evmopt ${fn%.evm}.bin $start > ${fn%.evm}.out
-		if [ -f ${fn%.evm}.expect ]; then
-			if cmp ${fn%.evm}.out ${fn%.evm}.expect; then
+		v ../vmsrc/evmdemo $evmopt ${fn}.bin $start > ${fn}.out
+		if [ -f ${fn%.py}.expect ]; then
+			if cmp ${fn%.evm}.out-native ${fn%.py}.expect; then
+				echo "OK: Native passed $fn."
+				(( count_ok++ ))
+			else
+				echo "ERROR: Native output of $fn was not as expected!"
+				(( count_error++ ))
+			fi
+
+			if cmp ${fn%.evm}.out ${fn%.py}.expect; then
 				echo "OK: Passed $fn."
 				(( count_ok++ ))
 			else
