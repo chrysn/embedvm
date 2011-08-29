@@ -82,7 +82,7 @@ void write_symbols(FILE *f, struct evm_insn_s *insn)
 		sym->addr = insn->addr;
 		sym->next = symbols;
 		symbols = sym;
-		fprintf(f, "%04X %s\n", insn->addr, insn->symbol);
+		fprintf(f, "%04X %s (%s)\n", insn->addr, insn->symbol, insn->data_len ? "data" : insn->opcode ? "code" : insn->set_addr ? "address" : "other");
 	}
 
 	write_symbols(f, insn->left);
