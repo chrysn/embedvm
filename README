@@ -36,7 +36,7 @@ The file README.VM contains a brief description of the virtual machine.
 
 A documentation of the high level language frontend is still to be done.
 
-The directory tools/ contains a compiler for the C-like EVM lagnuage that
+The directory tools/ contains a compiler for the C-like EVM language that
 can be used for generating VM bytecode in various formats.
 See tools/example.evm for a simple demo application.
 
@@ -44,4 +44,7 @@ The directory vmsrc/ contains the virtual machine itself and a simple demo
 host application as a reference for how to embedd the VM.
 
 The directory examples/ contains example applications using EmbedVM.
+
+The dircetory pysrc/ contains an additional python language frontend for
+those who prefer python over the native C-like EVM language.
 
