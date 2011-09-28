@@ -86,6 +86,7 @@ struct func_call_args_desc_s {
 
 %token <number> TOK_NUMBER TOK_USERFUNC
 %token <string> TOK_ID
+%token <string> TOK_STRINGLIT
 
 %token TOK_IF TOK_ELSE TOK_DO TOK_FOR TOK_WHILE
 %token TOK_BREAK TOK_CONTINUE TOK_GOTO TOK_RETURN TOK_FUNCTION
@@ -237,7 +238,14 @@ array_init_data:
 
 array_init:
 	/* empty */ { $$.len = -1; $$.data = NULL; } |
-	'=' '{' array_init_data '}' { $$ = $3; };
+	'=' '{' array_init_data '}' { $$ = $3; } |
+	'=' TOK_STRINGLIT {
+		int i;
+		$$.len = strlen($2) + 1;
+		$$.data = malloc($$.len * sizeof(int));
+		for (i = 0; i < $$.len; i++)
+			$$.data[i] = $2[i];
+	};
 
 global_var_init:
 	/* empty */ { $$ = NULL; } |
@@ -285,6 +293,30 @@ global_data:
 		add_nametab_global($3, $2, $$);
 		if ($1 >= 0) {
 			if ($7.len >= 0) {
+				fprintf(stderr, "Error in line %d: Extern declaration of `%s' with initializer!\n", yyget_lineno(), $3);
+				exit(1);
+			}
+			$$->addr = $1;
+			$$ = NULL;
+		}
+	} |
+	maybe_extern array_type TOK_ID '[' ']' array_init ';' {
+		int i;
+		if ($6.len < 0) {
+			fprintf(stderr, "Error in line %d: empty array '%s'\n", yyget_lineno(), $3);
+			exit(1);
+		}
+		$$ = new_insn_data($6.len, NULL, NULL);
+		$$->symbol = strdup($3);
+		if ($6.len >= 0) {
+			$$->initdata = calloc(1, $6.len);
+			for (i = 0; i < $6.len; i++) {
+				$$->initdata[i] = $6.data[i];
+			}
+		}
+		add_nametab_global($3, $2, $$);
+		if ($1 >= 0) {
+			if ($6.len >= 0) {
 				fprintf(stderr, "Error in line %d: Extern declaration of `%s' with initializer!\n", yyget_lineno(), $3);
 				exit(1);
 			}

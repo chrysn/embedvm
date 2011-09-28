@@ -99,7 +99,7 @@
 "0"[0-7]*		{ yylval.number = strtol(yytext+1, NULL, 8); return TOK_NUMBER; }
 "0b"[01]+		{ yylval.number = strtol(yytext+2, NULL, 2); return TOK_NUMBER; }
 "0x"[0-9a-fA-F]+	{ yylval.number = strtol(yytext+2, NULL, 16); return TOK_NUMBER; }
-
+"\""(\\.|[^"])*"\"" { yylval.string = strdup(yytext+1); yylval.string[strlen(yylval.string)-1] = 0; return TOK_STRINGLIT; }
 [a-zA-Z_][a-zA-Z0-9_]* { yylval.string = strdup(yytext); return TOK_ID; }
 
 "/*" BEGIN(comment);
