@@ -22,4 +22,5 @@ Called user function 1 with 2 args: 2 114
 Called user function 1 with 2 args: 2 108
 Called user function 1 with 2 args: 2 100
 Called user function 1 with 2 args: 2 33
+Called user function 1 with 1 args: 0
 Main function returned => Terminating.
