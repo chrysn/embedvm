@@ -693,6 +693,12 @@ expression:
 	TOK_NUMBER {
 		$$ = new_insn_op_val(0x9a, $1, NULL, NULL);
 	} |
+	TOK_STRINGLIT {
+		struct evm_insn_s *end = new_insn(NULL, NULL);
+		struct evm_insn_s *data = new_insn_data(strlen($1) + 1, NULL, end);
+		data->initdata = (uint8_t*)$1;
+		$$ = new_insn_op_absaddr(0x9a, data, NULL, new_insn_op_reladdr(0xa0 + 1, end, NULL, data));
+	} |
 	TOK_LINE {
 		$$ = new_insn_op_val(0x9a, yyget_lineno(), NULL, NULL);
 	} |
