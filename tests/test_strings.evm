@@ -1,0 +1,17 @@
+
+array8u str1[] = "Hello World?";
+
+function print(idx, str)
+{
+	local i;
+	for (i=0; $ptr8u[str, i]; i++)
+		$uf1(idx, $ptr8u[str, i]);
+}
+
+function main()
+{
+	print(1, &str1);
+	print(2, "Hello World!");
+	$uf1(0);
+}
+

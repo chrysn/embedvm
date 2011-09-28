@@ -5,8 +5,8 @@ Address space and word width
 The machine can address up to 64k of memory. The memory can be addressed in
 units of single bytes, but local variables are always 16bit words.
 
-It operates on 16bit words that are always interpreted as signed integeres in
-context where signed/unsigned does make a difference (multiply/divide and
+It operates on 16bit words and are always interpreted as signed integers in
+contexts where signed/unsigned does make a difference (multiply/divide and
 the compare operators).
 
 The memory is always accessed using reader/writer functions that are provided
@@ -29,10 +29,9 @@ SP (Stack Pointer)
 SFP (Stack Frame Pointer)
 	The address of the first local variable on the stack.
 
-Also there are three function pointers in the machine state for
-embedding the VM in a host environment: a reader and a writer
-for accessing the VM memory and a callback for calling user
-functions.
+In addition to that there are three function pointers in the machine state
+for embedding the VM in a host environment: a reader and a writer for
+accessing the VM memory and a callback for calling user functions.
 
 
 The Stack
