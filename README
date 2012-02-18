@@ -48,3 +48,13 @@ The directory examples/ contains example applications using EmbedVM.
 The dircetory pysrc/ contains an additional python language frontend for
 those who prefer python over the native C-like EVM language.
 
+In papers and reports, please refer to EmbedVM as follows: "Clifford Wolf.
+EmbedVM: a small embeddable virtual machine for microcontrollers.
+http://www.clifford.at/embedvm/", e.g. using the following BibTeX code:
+
+@MISC{EmbedVM,
+  author = {Clifford Wolf},
+  title = {EmbedVM: a small embeddable virtual machine for microcontrollers},
+  howpublished = "\url{http://www.clifford.at/embedvm/}"
+}
+
