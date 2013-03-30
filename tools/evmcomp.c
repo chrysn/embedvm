@@ -38,8 +38,8 @@ abort_with_help_msg:
 	if (prefix_len < 5 || strcmp(".evm", prefix+prefix_len-4))
 		goto abort_with_help_msg;
 
-	stdin = fopen(prefix, "rt");
-	if (!stdin)
+	yyin = fopen(prefix, "rt");
+	if (!yyin)
 		goto abort_with_help_msg;
 
 	// yydebug = 1;

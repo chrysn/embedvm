@@ -93,6 +93,7 @@ extern void write_binfile(FILE *f, struct evm_insn_s *insn);
 extern void write_header(FILE *f);
 extern void write_intelhex(FILE *f);
 
+extern FILE *yyin;
 extern int yydebug;
 extern int yylex(void);
 extern int yyget_lineno(void);
