@@ -22,6 +22,7 @@
 #define _GNU_SOURCE
 
 #include <stdlib.h>
+#include <stdarg.h>
 #include <string.h>
 #include <assert.h>
 #include "evmcomp.h"
@@ -71,6 +72,23 @@ struct func_call_args_desc_s {
 	struct evm_insn_s *insn;
 	int num;
 };
+
+// there is no asprintf() on win32
+int my_asprintf(char **strp, const char *fmt, ...)
+{
+	int size = 64, rc;
+	va_list ap;
+	*strp = malloc(size + 1);
+	while (1) {
+		va_start(ap, fmt);
+		rc = vsnprintf(*strp, size + 1, fmt, ap);
+		va_end(ap);
+		if (rc >= 0 && rc < size) break;
+		size *= 2;
+		*strp = realloc(*strp, size + 1);
+	}
+	return rc;
+}
 
 %}
 
@@ -173,7 +191,7 @@ program:
 meta_statement:
 	TOK_MEMADDR TOK_NUMBER {
 		$$ = new_insn(NULL, NULL);
-		if (asprintf(&$$->symbol, "_memaddr_%04x", $2) < 0)
+		if (my_asprintf(&$$->symbol, "_memaddr_%04x", $2) < 0)
 			abort();
 		$$->has_set_addr = true;
 		$$->set_addr = $2;
@@ -185,7 +203,7 @@ meta_statement:
 			exit(1);
 		}
 		$$ = new_insn_op_reladdr(0xa0 + 1, e->addr, NULL, NULL);
-		if (asprintf(&$$->symbol, "_trampoline_%s", $3) < 0)
+		if (my_asprintf(&$$->symbol, "_trampoline_%s", $3) < 0)
 			abort();
 		$$->has_set_addr = true;
 		$$->set_addr = $2;
@@ -198,7 +216,7 @@ meta_statement:
 		sect->next = sections;
 		sections = sect;
 		$$ = new_insn(NULL, NULL);
-		if (asprintf(&$$->symbol, "_section_%s", $4) < 0)
+		if (my_asprintf(&$$->symbol, "_section_%s", $4) < 0)
 			abort();
 		$$->has_set_addr = true;
 		$$->set_addr = $2;
