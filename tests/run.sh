@@ -35,7 +35,7 @@ for fn; do
 		echo; echo "=== $fn ==="
 	fi
 	v ../tools/evmcomp $fn || exit 1
-	v ../pysrc/evm-disasm ${fn%.evm}.bin || echo "WARNING: Disassembling ${fn%.evm}.bin failed." && (( count_warn++ ))
+	v ../pysrc/evm-disasm ${fn%.evm}.bin || { echo "WARNING: Disassembling ${fn%.evm}.bin failed." && (( count_warn++ )); }
 	start=$( grep ' main ' ${fn%.evm}.sym | cut -f1 -d' ' ) 
 	if $verbose; then
 		v ../vmsrc/evmdemo $evmopt ${fn%.evm}.bin $start
