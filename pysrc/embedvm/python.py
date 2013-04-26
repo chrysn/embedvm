@@ -98,6 +98,9 @@ class Function(CodeObject):
     def __repr__(self):
         return "<%s \"%s\", %d instructions>"%(type(self).__name__, self.name, self.code.length)
 
+    def push_value(self, context):
+        context.code.append(bytecode.PushRef(value=self.entry_label.get_ref()))
+
     def call(self, context, args, keywords, starargs, kwargs):
         return self.PushableFunctioncall(self, args, keywords, starargs, kwargs)
     class PushableFunctioncall(CodeObject, namedtuple("PushableFunctionData", "function args keywords starargs kwargs")):

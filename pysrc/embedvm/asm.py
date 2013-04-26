@@ -57,6 +57,9 @@ class FreeCodeBlock(CodeBlock):
                 if isinstance(command, bytecode.VariableAddressCommand) and isinstance(command.address, bytecode.Label.LabelRef):
                     assert command.address.ref in self.code, "label not found: %r"%command.address
                     command.reladdr = positions[self.code.index(command.address.ref)] - positions[ln]
+                if isinstance(command, bytecode.RefDataCommand) and isinstance(command.data, bytecode.Label.LabelRef):
+                    assert command.data.ref in self.code, "label not found: %r"%command.data
+                    command.dataptr = positions[self.code.index(command.data.ref)]
 
         update_positions()
         for i in range(2): # one time enhances the positions, two times only enhances corner cases
