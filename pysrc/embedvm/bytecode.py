@@ -1,6 +1,22 @@
+"""Classes usable both for interpreting EmbedVM bytecode to their assembly
+names (eg 0x9e -> CallAddress()) and back (PushZeros(5) -> 0xf5).
+
+The interface of a bytecode command is defined by the common base class
+`BytecodeCommand`. The conversion from binary representation is dispatched via
+the global `interpret` function, which looks up matching commands in the
+module's globals list, and then relies on the matched class's `from_bin`
+function to fill in the details (especially the command length, so the offset
+of the next command can be determined).
+
+The classes in here don't deal with interatction with other commands, at worst
+they declare that they need help from the assembler to evaluate their arguments
+before they can be converted to binary form (RefDataCommand,
+VariableAddressCommand).
+"""
+
 import copy
 
-from util import signext, assert_signexted
+from util import signext, assert_signexted, flipped
 
 class UnknownCommand(Exception):
     """A byte sequence was attempted to parse that has no byte code command associated"""
@@ -368,7 +384,7 @@ class GlobalAccess(ByteCodeCommand):
     nargs = 2 # or 1 or 0, will be overwritten by instances which know their exact mode
 
     M2NARGSPOP = {0: (1, False), 1: (2, False), 2: (0, True), 3: (1, True), 4: (2, True)}
-    NARGSPOP2M = dict((v, k) for (k, v) in M2NARGSPOP.items())
+    NARGSPOP2M = flipped(M2NARGSPOP)
 
     def __init__(self, nargs, popoffset, address=None):
         self.popoffset = popoffset
@@ -503,6 +519,8 @@ def interpret(commandbuffer, index):
     command = commandbuffer[index]
     candidates = []
     for c in globals().values():
+        if c == PushRef:
+            continue # will never decode something as pushref, because it's impossible to tell apart from an U16
         if type(c) == type and issubclass(c, ByteCodeCommand):
             if c.check_match(command):
                 candidates.append(c)
