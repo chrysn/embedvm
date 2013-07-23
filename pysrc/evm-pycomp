@@ -35,7 +35,7 @@ def main():
         with open(opts.asmfile, 'w') as f:
             f.write(converted)
     pb.fix_all()
-    if opts.asmfile:
+    if opts.asmfixfile:
         converted = pb.to_asm()
         with open(opts.asmfixfile, 'w') as f:
             f.write(converted)
